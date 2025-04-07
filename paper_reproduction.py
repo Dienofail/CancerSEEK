@@ -443,88 +443,104 @@ if len(cancer_types) == 0:
     cancer_types = ["Unknown"]  # Add a default to prevent errors
 
 # If we have probabilities from the localization model
-if combined_results['localization_results'] is not None:
+if combined_results['localization_results'] is not None and 'probabilities' in combined_results['localization_results']:
     # Add debug info to understand data structures
     print("\n==== Debug: Tissue localization data ====")
-    print(f"Number of positive indices: {len(positive_indices)}")
-    print(f"Max positive index: {int(np.max(positive_indices)) if len(positive_indices) > 0 else 'None'}")
+    print(f"Number of positive indices (cancer samples predicted positive): {len(positive_indices)}")
+    print(f"Total cancer samples in localization model: {len(combined_results['localization_results']['predictions'])}")
     
-    predictions = combined_results['localization_results']['predictions']
-    print(f"Predictions array length: {len(predictions)}")
-    print(f"Predictions array type: {type(predictions)}")
-    print(f"First few values in predictions: {predictions[:5] if len(predictions) >= 5 else predictions}")
+    # Get the predictions and probabilities from the localization model results
+    # These are for the CANCER samples only
+    localization_predictions = combined_results['localization_results']['predictions']
+    localization_probabilities = combined_results['localization_results']['probabilities']
+    localization_classes = combined_results['localization_results']['classes']
     
-    # Extract predictions for positive samples
-    y_pred_proba = {}
-    
-    for i, idx in enumerate(positive_indices):
-        # Make sure idx is valid by using modulo or checking array bounds
-        idx_int = int(idx)  # Convert numpy int to Python int
-        if idx_int >= len(predictions):
-            continue  # Skip this index if it's out of bounds
-            
-        # Create probability dict for this sample
-        proba_dict = {}
-        for cancer_type in cancer_types:
-            # Get "predicted probabilities" for each cancer type (simplified approach)
-            pred_type = predictions[idx_int] if len(predictions) > idx_int else ""
-            if cancer_type == pred_type and pred_type != "":
-                proba_dict[cancer_type] = 0.9  # High probability for predicted class
-            else:
-                proba_dict[cancer_type] = 0.1 / (len(cancer_types) - 1) if len(cancer_types) > 1 else 0.1  # Distribute remaining probability
-        
-        y_pred_proba[i] = proba_dict
+    print(f"Localization predictions length: {len(localization_predictions)}")
+    print(f"Localization probabilities shape: {localization_probabilities.shape}")
+    print(f"Localization classes: {localization_classes}")
 
-    # Plot tissue localization accuracy
-    fig_loc, ax_loc = plotting.plot_tissue_localization_accuracy(
-        y_true_filtered,
-        y_pred_proba,
-        cancer_types=cancer_types,
-        figsize=(12, 8),
-        detection_model=detection_model + (" (w/extra features)" if args.use_additional_features else ""),
-        localization_model=localization_model
-    )
-    # No need to update the title here as it's now handled in the plotting function
-    plt.tight_layout()
-    # Save tissue localization accuracy to PDF
-    loc_filename = f"tissue_localization_accuracy_{detection_model}{extra_features_suffix}_{localization_model}{std_suffix}.pdf"
-    plt.savefig(os.path.join(plots_dir, loc_filename), bbox_inches='tight')
-    print(f"Saved tissue localization accuracy to {os.path.join(plots_dir, loc_filename)}")
+    # Map cancer sample indices (from original X) to indices within the localization results
+    cancer_mask = y_cancer_status == 1
+    cancer_indices_in_X = np.where(cancer_mask)[0]
+    map_X_idx_to_loc_idx = {x_idx: loc_idx for loc_idx, x_idx in enumerate(cancer_indices_in_X)}
     
-    # Create array of actual predicted classes for confusion matrix
-    y_pred_classes = []
-    valid_indices = []
+    # Filter localization probabilities to only include the positive_indices
+    y_pred_proba_filtered = {}
+    valid_positive_indices_for_plot = [] # Keep track of which positive samples had localization results
     
-    for i, idx in enumerate(positive_indices):
-        idx_int = int(idx)  # Convert numpy int to Python int
-        # Only include samples where we have both true labels and predictions
-        if idx_int < len(predictions):
-            y_pred_classes.append(predictions[idx_int])
-            valid_indices.append(i)
+    for plot_idx, x_idx in enumerate(positive_indices):
+        # Find the corresponding index in the localization results
+        loc_idx = map_X_idx_to_loc_idx.get(int(x_idx))
+        
+        if loc_idx is not None and loc_idx < localization_probabilities.shape[0]:
+            # Create probability dict for this sample using actual probabilities
+            proba_dict = dict(zip(localization_classes, localization_probabilities[loc_idx]))
+            y_pred_proba_filtered[plot_idx] = proba_dict
+            valid_positive_indices_for_plot.append(plot_idx)
+        else:
+            print(f"Warning: Index {x_idx} (from positive samples) not found or out of bounds in localization results (loc_idx: {loc_idx}). Skipping.")
     
-    # Filter y_true to only include samples with valid predictions
-    y_true_cm = [y_true_filtered[i] for i in valid_indices]
+    # Filter y_true to match the samples we have probabilities for
+    y_true_plot = [y_true_filtered[i] for i in valid_positive_indices_for_plot]
     
-    # Check if arrays match in length
-    if len(y_true_cm) == len(y_pred_classes):
-        # Plot tissue localization confusion matrix
-        fig_cm, ax_cm, cm_metrics = plotting.plot_tissue_localization_confusion_matrix(
-            y_true_cm,
-            y_pred_classes,
+    print(f"Number of samples for localization plot: {len(y_true_plot)}")
+    
+    if len(y_true_plot) > 0:
+        # Plot tissue localization accuracy using filtered probabilities
+        fig_loc, ax_loc = plotting.plot_tissue_localization_accuracy(
+            y_true_plot,  # Use filtered true labels
+            y_pred_proba_filtered, # Use the dict of actual probabilities
             cancer_types=cancer_types,
-            figsize=(10, 8),
+            figsize=(12, 8),
             detection_model=detection_model + (" (w/extra features)" if args.use_additional_features else ""),
             localization_model=localization_model
         )
         plt.tight_layout()
-        # Save confusion matrix to PDF
-        cm_filename = f"tissue_localization_confusion_matrix_{detection_model}{extra_features_suffix}_{localization_model}{std_suffix}.pdf"
-        plt.savefig(os.path.join(plots_dir, cm_filename), bbox_inches='tight')
-        print(f"Saved tissue localization confusion matrix to {os.path.join(plots_dir, cm_filename)}")
-        print(f"Localization metrics: Accuracy={cm_metrics['accuracy']:.3f}, Macro-F1={cm_metrics['macro_f1']:.3f}, Micro-F1={cm_metrics['micro_f1']:.3f}")
+        loc_filename = f"tissue_localization_accuracy_{detection_model}{extra_features_suffix}_{localization_model}{std_suffix}.pdf"
+        plt.savefig(os.path.join(plots_dir, loc_filename), bbox_inches='tight')
+        print(f"Saved tissue localization accuracy to {os.path.join(plots_dir, loc_filename)}")
     else:
-        print(f"Warning: Could not create confusion matrix due to length mismatch: y_true has {len(y_true_cm)} elements but y_pred has {len(y_pred_classes)} elements")
+        print("Warning: No valid samples found for tissue localization accuracy plot after filtering.")
+
+    # --- Prepare data for Confusion Matrix --- 
+    # Use the localization_predictions directly (they correspond to cancer samples)
+    # Filter y_cancer_type to match the samples used in localization
+    y_true_cm = y_cancer_type[cancer_mask].values # True labels for all cancer samples
+    y_pred_cm = localization_predictions # Predicted labels for all cancer samples
+    
+    # Ensure lengths match before plotting CM
+    if len(y_true_cm) == len(y_pred_cm):
+        # Filter out any non-cancer types if necessary (should already be done)
+        valid_cm_mask = [t in cancer_types for t in y_true_cm]
+        y_true_cm_final = y_true_cm[valid_cm_mask]
+        y_pred_cm_final = y_pred_cm[valid_cm_mask]
+        
+        print(f"Number of samples for confusion matrix: {len(y_true_cm_final)}")
+        
+        if len(y_true_cm_final) > 0:
+            # Plot tissue localization confusion matrix
+            fig_cm, ax_cm, cm_metrics = plotting.plot_tissue_localization_confusion_matrix(
+                y_true_cm_final, # True labels for cancer samples
+                y_pred_cm_final, # Predicted labels for cancer samples
+                cancer_types=cancer_types,
+                figsize=(10, 8),
+                detection_model=detection_model + (" (w/extra features)" if args.use_additional_features else ""),
+                localization_model=localization_model
+            )
+            plt.tight_layout()
+            cm_filename = f"tissue_localization_confusion_matrix_{detection_model}{extra_features_suffix}_{localization_model}{std_suffix}.pdf"
+            plt.savefig(os.path.join(plots_dir, cm_filename), bbox_inches='tight')
+            print(f"Saved tissue localization confusion matrix to {os.path.join(plots_dir, cm_filename)}")
+            if cm_metrics:
+                print(f"Localization metrics: Accuracy={cm_metrics['accuracy']:.3f}, Macro-F1={cm_metrics['macro_f1']:.3f}, Micro-F1={cm_metrics['micro_f1']:.3f}")
+            else:
+                print("Warning: Could not calculate confusion matrix metrics.")
+        else:
+            print("Warning: No valid samples found for confusion matrix after filtering.")
+    else:
+        print(f"Warning: Could not create confusion matrix due to length mismatch: y_true_cm ({len(y_true_cm)}) vs y_pred_cm ({len(y_pred_cm)})")
+
 else:
-    print("No localization results available.")
+    print("No localization results or probabilities available.")
 
 print("\n==== All processing complete ====")

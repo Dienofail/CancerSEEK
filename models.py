@@ -1506,6 +1506,8 @@ def nested_cross_validation_rf(X, y, protein_features=None, omega_score_col='ome
     fold_results = []
     all_predictions = np.zeros_like(y, dtype=object)
     all_predictions.fill('')  # Initialize with empty strings
+    # ADDED: Container for probabilities (num_samples x num_classes)
+    all_probabilities = np.zeros((len(y), len(classes)))
     
     # Confusion matrices for each fold
     confusion_matrices = []
@@ -1615,14 +1617,27 @@ def nested_cross_validation_rf(X, y, protein_features=None, omega_score_col='ome
         
         # Make predictions on test set
         y_pred = best_model.predict(X_test_combined)
+        # ADDED: Get predicted probabilities
+        y_pred_proba = best_model.predict_proba(X_test_combined)
         
         # For XGBoost, convert predicted class indices back to original labels
         if model_type == 'XGB':
             y_pred = np.array([index_to_class[idx] for idx in y_pred])
-            
+        
         # Store predictions
         for i, idx in enumerate(test_idx):
             all_predictions[idx] = y_pred[i]
+            # ADDED: Store probabilities for the corresponding sample
+            # Ensure the order of probabilities matches the order of classes
+            if hasattr(best_model, 'classes_'):
+                class_order = best_model.classes_
+            else:
+                class_order = classes # Assume the order matches the unique classes found earlier
+            
+            # Map probabilities to the correct class index in all_probabilities
+            prob_dict = dict(zip(class_order, y_pred_proba[i]))
+            for class_idx, class_name in enumerate(classes):
+                all_probabilities[idx, class_idx] = prob_dict.get(class_name, 0.0)
         
         # Calculate confusion matrix for this fold
         fold_cm = confusion_matrix(y_test_original, y_pred, labels=classes)
@@ -1678,6 +1693,8 @@ def nested_cross_validation_rf(X, y, protein_features=None, omega_score_col='ome
         'fold_results': fold_results,
         'overall_accuracy': overall_acc,
         'predictions': all_predictions,
+        # ADDED: Return probabilities
+        'probabilities': all_probabilities,
         'confusion_matrices': confusion_matrices,
         'overall_confusion_matrix': overall_cm,
         'classes': classes,
