@@ -44,6 +44,10 @@ def parse_arguments():
 # Get command line arguments
 args = parse_arguments()
 
+# Define suffix based on standardization
+std_suffix = "_std" if args.standardize else "_no_std"
+extra_features_suffix = "_extra_features" if args.use_additional_features else ""
+
 # Map 'none' to None for log_transform
 log_transform = None if args.log_transform == 'none' else args.log_transform
 
@@ -283,7 +287,7 @@ if not os.path.exists(plots_dir):
 
 print("\n==== Starting model training and evaluation ====")
 print(f"Training combined cancer detection ({args.detection_model}) and localization ({args.localization_model}) model with {X.shape[0]} samples")
-print(f"Using {len(detection_features)} protein features for detection model")
+print(f"Using {len(detection_features)} features for detection model: {detection_features}")
 print(f"Performing {args.outer_splits}-fold outer CV and {args.inner_splits}-fold inner CV")
 print(f"Standardization: {args.standardize}, Log transformation: {args.log_transform}")
 print(f"Using additional features: {args.use_additional_features}")
@@ -329,7 +333,7 @@ fig_roc, ax_roc, spec_percent = plotting.plot_roc_curve(
 )
 plt.tight_layout()
 # Save ROC curve to PDF
-roc_filename = f"roc_curve_{detection_model}_{spec_percent}" + ("_extra_features" if args.use_additional_features else "") + ".pdf"
+roc_filename = f"roc_curve_{detection_model}_{spec_percent}{extra_features_suffix}{std_suffix}.pdf"
 plt.savefig(os.path.join(plots_dir, roc_filename), bbox_inches='tight')
 print(f"Saved ROC curve to {os.path.join(plots_dir, roc_filename)}")
 print(f"Saved ROC curve data to {os.path.join(plots_dir, f'roc_curve_data_{detection_model}_{spec_percent}' + ('_extra_features' if args.use_additional_features else '') + '.pkl')}")
@@ -350,9 +354,30 @@ fig_subtype, ax_subtype, spec_percent = plotting.plot_sensitivity_by_subtype(
 )
 plt.tight_layout()
 # Save sensitivity by subtype to PDF
-subtype_filename = f"sensitivity_by_subtype_{detection_model}_{spec_percent}" + ("_extra_features" if args.use_additional_features else "") + ".pdf"
+subtype_filename = f"sensitivity_by_subtype_{detection_model}_{spec_percent}{extra_features_suffix}{std_suffix}.pdf"
 plt.savefig(os.path.join(plots_dir, subtype_filename), bbox_inches='tight')
 print(f"Saved sensitivity by subtype to {os.path.join(plots_dir, subtype_filename)}")
+
+# Calculate and plot sensitivity by cancer type and stage
+sensitivity_by_subtype_and_stage = plotting.calculate_sensitivity_by_subtype_and_stage(
+    y_cancer_status,
+    combined_results['detection_results']['probabilities'],
+    data_df['Tumor_type'],
+    data_df['AJCC_Stage'],
+    target_specificity=target_specificity
+)
+
+# Plot sensitivity by cancer type and stage
+fig_subtype_stage, axes_subtype_stage, spec_percent = plotting.plot_sensitivity_by_subtype_and_stage(
+    sensitivity_by_subtype_and_stage,
+    figsize=(15, 12),
+    model_type=detection_model + (" (w/extra features)" if args.use_additional_features else "")
+)
+plt.tight_layout(rect=[0, 0, 1, 0.96])  # Leave room for suptitle
+# Save sensitivity by subtype and stage to PDF
+subtype_stage_filename = f"sensitivity_by_subtype_and_stage_{detection_model}_{spec_percent}{extra_features_suffix}{std_suffix}.pdf"
+plt.savefig(os.path.join(plots_dir, subtype_stage_filename), bbox_inches='tight')
+print(f"Saved sensitivity by subtype and stage to {os.path.join(plots_dir, subtype_stage_filename)}")
 
 # Calculate sensitivity by cancer stage
 sensitivity_by_stage = plotting.calculate_sensitivity_by_stage(
@@ -370,18 +395,24 @@ fig_stage, ax_stage, spec_percent = plotting.plot_sensitivity_by_stage(
 )
 plt.tight_layout()
 # Save sensitivity by stage to PDF
-stage_filename = f"sensitivity_by_stage_{detection_model}_{spec_percent}" + ("_extra_features" if args.use_additional_features else "") + ".pdf"
+stage_filename = f"sensitivity_by_stage_{detection_model}_{spec_percent}{extra_features_suffix}{std_suffix}.pdf"
 plt.savefig(os.path.join(plots_dir, stage_filename), bbox_inches='tight')
 print(f"Saved sensitivity by stage to {os.path.join(plots_dir, stage_filename)}")
 
 # Generate performance summary CSV
 performance_csv_path = os.path.join(plots_dir, "performance_summary.csv")
+# Construct the model type string with extra features and standardization status
+summary_model_type = f"{detection_model}{extra_features_suffix}{std_suffix}"
 summary_df = plotting.create_performance_summary_csv(
     sensitivity_by_stage,
     performance_csv_path,
-    model_type=detection_model + ("_extra_features" if args.use_additional_features else "")
+    model_type=summary_model_type,
+    standardized=args.standardize
 )
-print(f"Saved performance summary to {performance_csv_path.replace('.csv', f'_{detection_model}_{spec_percent}' + ('_extra_features' if args.use_additional_features else '') + '.csv')}")
+# Construct the final filename for the summary CSV
+summary_filename_base = os.path.splitext(performance_csv_path)[0]
+final_summary_filename = f"{summary_filename_base}_{summary_model_type}_{spec_percent}.csv"
+print(f"Saved performance summary to {final_summary_filename}")
 
 # Plot tissue localization accuracy (Fig 3 in the paper)
 print("Processing tissue localization results...")
@@ -456,7 +487,7 @@ if combined_results['localization_results'] is not None:
     # No need to update the title here as it's now handled in the plotting function
     plt.tight_layout()
     # Save tissue localization accuracy to PDF
-    loc_filename = f"tissue_localization_accuracy_{detection_model}" + ("_extra_features" if args.use_additional_features else "") + f"_{localization_model}.pdf"
+    loc_filename = f"tissue_localization_accuracy_{detection_model}{extra_features_suffix}_{localization_model}{std_suffix}.pdf"
     plt.savefig(os.path.join(plots_dir, loc_filename), bbox_inches='tight')
     print(f"Saved tissue localization accuracy to {os.path.join(plots_dir, loc_filename)}")
     
@@ -487,7 +518,7 @@ if combined_results['localization_results'] is not None:
         )
         plt.tight_layout()
         # Save confusion matrix to PDF
-        cm_filename = f"tissue_localization_confusion_matrix_{detection_model}" + ("_extra_features" if args.use_additional_features else "") + f"_{localization_model}.pdf"
+        cm_filename = f"tissue_localization_confusion_matrix_{detection_model}{extra_features_suffix}_{localization_model}{std_suffix}.pdf"
         plt.savefig(os.path.join(plots_dir, cm_filename), bbox_inches='tight')
         print(f"Saved tissue localization confusion matrix to {os.path.join(plots_dir, cm_filename)}")
         print(f"Localization metrics: Accuracy={cm_metrics['accuracy']:.3f}, Macro-F1={cm_metrics['macro_f1']:.3f}, Micro-F1={cm_metrics['micro_f1']:.3f}")

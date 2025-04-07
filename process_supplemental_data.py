@@ -388,12 +388,6 @@ def load_s10_confusion_matrix():
             if df[col].median() > 1:
                 df[col] = df[col] / 100
     
-    # Rename columns to indicate actual cancer types
-    df.columns = ['actual_' + col for col in df.columns]
-    
-    # Rename index to indicate predicted cancer types
-    df.index = ['predicted_' + idx for idx in df.index]
-    
     return df
 
 
