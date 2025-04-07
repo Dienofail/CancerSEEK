@@ -215,6 +215,573 @@ def normalize_mutation_data(mutation_df, clinical_df, detection_limits=None, tra
         print(f"Error in normalize_mutation_data: {str(e)}. Returning original data.")
         return mutation_df, (0, 1)
 
+# TensorFlow-based model implementations
+
+def create_tf_late_fusion_model(protein_input_shape, mutation_input_shape, 
+                             num_classes=2, dropout_rate=0.5, 
+                             l2_reg=0.01, learning_rate=0.001):
+    """
+    Create a TensorFlow Late Fusion model that processes protein and mutation data separately
+    and then combines them for final prediction.
+    
+    Parameters:
+    -----------
+    protein_input_shape : tuple
+        Shape of protein input features (n_features,)
+    mutation_input_shape : tuple
+        Shape of mutation input features (n_features,)
+    num_classes : int, optional
+        Number of output classes (default: 2 for binary cancer detection)
+    dropout_rate : float, optional
+        Dropout rate to prevent overfitting (default: 0.5)
+    l2_reg : float, optional
+        L2 regularization strength (default: 0.01)
+    learning_rate : float, optional
+        Learning rate for Adam optimizer (default: 0.001)
+        
+    Returns:
+    --------
+    keras.Model
+        Compiled TensorFlow model for late fusion
+    """
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required for this model but is not available.")
+    
+    # Input layers
+    protein_inputs = layers.Input(shape=protein_input_shape, name='protein_input')
+    mutation_inputs = layers.Input(shape=mutation_input_shape, name='mutation_input')
+    
+    # Process protein data
+    x_protein = layers.Dense(64, activation='relu', 
+                         kernel_regularizer=regularizers.l2(l2_reg),
+                         name='protein_dense_1')(protein_inputs)
+    x_protein = layers.BatchNormalization(name='protein_bn_1')(x_protein)
+    x_protein = layers.Dropout(dropout_rate, name='protein_dropout_1')(x_protein)
+    x_protein = layers.Dense(32, activation='relu',
+                         kernel_regularizer=regularizers.l2(l2_reg),
+                         name='protein_dense_2')(x_protein)
+    x_protein = layers.BatchNormalization(name='protein_bn_2')(x_protein)
+    x_protein = layers.Dropout(dropout_rate, name='protein_dropout_2')(x_protein)
+    
+    # Process mutation data
+    x_mutation = layers.Dense(16, activation='relu',
+                          kernel_regularizer=regularizers.l2(l2_reg),
+                          name='mutation_dense_1')(mutation_inputs)
+    x_mutation = layers.BatchNormalization(name='mutation_bn_1')(x_mutation)
+    x_mutation = layers.Dropout(dropout_rate, name='mutation_dropout_1')(x_mutation)
+    
+    # Concatenate protein and mutation features (late fusion)
+    concatenated = layers.Concatenate(name='concatenate')([x_protein, x_mutation])
+    
+    # Final prediction layers
+    x = layers.Dense(32, activation='relu',
+                  kernel_regularizer=regularizers.l2(l2_reg),
+                  name='combined_dense_1')(concatenated)
+    x = layers.BatchNormalization(name='combined_bn_1')(x)
+    x = layers.Dropout(dropout_rate, name='combined_dropout_1')(x)
+    
+    # Output layer
+    if num_classes == 2:
+        # Binary classification
+        outputs = layers.Dense(1, activation='sigmoid', name='output')(x)
+        loss = 'binary_crossentropy'
+        metrics = ['accuracy', tf.keras.metrics.AUC(name='auc')]
+    else:
+        # Multi-class classification
+        outputs = layers.Dense(num_classes, activation='softmax', name='output')(x)
+        loss = 'sparse_categorical_crossentropy'
+        metrics = ['accuracy']
+    
+    # Create model
+    model = models.Model(inputs=[protein_inputs, mutation_inputs], outputs=outputs)
+    
+    # Compile model
+    model.compile(
+        optimizer=optimizers.Adam(learning_rate=learning_rate),
+        loss=loss,
+        metrics=metrics
+    )
+    
+    return model
+
+def create_tf_moe_model(protein_input_shape, mutation_input_shape,
+                     num_classes=2, num_experts=3, dropout_rate=0.5,
+                     l2_reg=0.01, learning_rate=0.001):
+    """
+    Create a TensorFlow Mixture of Experts model that uses gating to dynamically
+    combine predictions from different expert networks.
+    
+    Parameters:
+    -----------
+    protein_input_shape : tuple
+        Shape of protein input features (n_features,)
+    mutation_input_shape : tuple
+        Shape of mutation input features (n_features,)
+    num_classes : int, optional
+        Number of output classes (default: 2 for binary cancer detection)
+    num_experts : int, optional
+        Number of expert networks (default: 3)
+    dropout_rate : float, optional
+        Dropout rate to prevent overfitting (default: 0.5)
+    l2_reg : float, optional
+        L2 regularization strength (default: 0.01)
+    learning_rate : float, optional
+        Learning rate for Adam optimizer (default: 0.001)
+        
+    Returns:
+    --------
+    keras.Model
+        Compiled TensorFlow model for mixture of experts
+    """
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required for this model but is not available.")
+    
+    # Input layers
+    protein_inputs = layers.Input(shape=protein_input_shape, name='protein_input')
+    mutation_inputs = layers.Input(shape=mutation_input_shape, name='mutation_input')
+    
+    # Combined inputs for gating network
+    combined_inputs = layers.Concatenate(name='combined_inputs')([protein_inputs, mutation_inputs])
+    
+    # Gating network
+    gating = layers.Dense(64, activation='relu',
+                       kernel_regularizer=regularizers.l2(l2_reg),
+                       name='gating_dense_1')(combined_inputs)
+    gating = layers.BatchNormalization(name='gating_bn_1')(gating)
+    gating = layers.Dropout(dropout_rate, name='gating_dropout_1')(gating)
+    gating = layers.Dense(num_experts, activation='softmax',
+                       name='gating_output')(gating)
+    
+    # Expert networks
+    expert_outputs = []
+    for i in range(num_experts):
+        # Process protein data
+        x_protein = layers.Dense(64, activation='relu',
+                              kernel_regularizer=regularizers.l2(l2_reg),
+                              name=f'expert_{i}_protein_dense_1')(protein_inputs)
+        x_protein = layers.BatchNormalization(name=f'expert_{i}_protein_bn_1')(x_protein)
+        x_protein = layers.Dropout(dropout_rate, name=f'expert_{i}_protein_dropout_1')(x_protein)
+        
+        # Process mutation data
+        x_mutation = layers.Dense(16, activation='relu',
+                               kernel_regularizer=regularizers.l2(l2_reg),
+                               name=f'expert_{i}_mutation_dense_1')(mutation_inputs)
+        x_mutation = layers.BatchNormalization(name=f'expert_{i}_mutation_bn_1')(x_mutation)
+        x_mutation = layers.Dropout(dropout_rate, name=f'expert_{i}_mutation_dropout_1')(x_mutation)
+        
+        # Combine protein and mutation features for this expert
+        x_combined = layers.Concatenate(name=f'expert_{i}_concatenate')([x_protein, x_mutation])
+        x_combined = layers.Dense(32, activation='relu',
+                               kernel_regularizer=regularizers.l2(l2_reg),
+                               name=f'expert_{i}_combined_dense_1')(x_combined)
+        
+        # Expert output
+        if num_classes == 2:
+            # Binary classification
+            expert_output = layers.Dense(1, activation='sigmoid',
+                                      name=f'expert_{i}_output')(x_combined)
+        else:
+            # Multi-class classification
+            expert_output = layers.Dense(num_classes, activation='softmax',
+                                      name=f'expert_{i}_output')(x_combined)
+        
+        expert_outputs.append(expert_output)
+    
+    # Stack expert outputs
+    if num_classes == 2:
+        # For binary classification, shape each output to [batch_size, 1]
+        stacked_experts = layers.Lambda(lambda x: tf.stack(x, axis=1),
+                                     name='stack_experts')(expert_outputs)
+    else:
+        # For multi-class, shape each output to [batch_size, num_classes]
+        stacked_experts = layers.Lambda(lambda x: tf.stack(x, axis=1),
+                                     name='stack_experts')(expert_outputs)
+    
+    # Reshape gating for broadcasting
+    gating_reshaped = layers.Reshape((num_experts, 1), name='reshape_gating')(gating)
+    
+    # Multiply experts by gating weights and sum
+    weighted_outputs = layers.Lambda(lambda x: tf.reduce_sum(x[0] * x[1], axis=1),
+                                  name='weighted_outputs')([stacked_experts, gating_reshaped])
+    
+    # Create model
+    model = models.Model(inputs=[protein_inputs, mutation_inputs], outputs=weighted_outputs)
+    
+    # Compile model
+    if num_classes == 2:
+        loss = 'binary_crossentropy'
+        metrics = ['accuracy', tf.keras.metrics.AUC(name='auc')]
+    else:
+        loss = 'sparse_categorical_crossentropy'
+        metrics = ['accuracy']
+    
+    model.compile(
+        optimizer=optimizers.Adam(learning_rate=learning_rate),
+        loss=loss,
+        metrics=metrics
+    )
+    
+    return model
+
+def tf_cross_validation(X, y, protein_features, omega_score_col='omega_score', 
+                     clinical_df=None, outer_splits=10, inner_splits=5, 
+                     random_state=42, standardize_features=True, 
+                     log_transform=None, model_type='TF',
+                     num_classes=2, batch_size=32, epochs=100,
+                     patience=10, dropout_rate=0.5):
+    """
+    Perform TensorFlow-based cross-validation for either the Late Fusion or MOE model.
+    
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        DataFrame containing features for model
+    y : pandas.Series or numpy.ndarray
+        Target variable (cancer vs normal or cancer types)
+    protein_features : list
+        List of protein features to use in the model
+    omega_score_col : str, optional
+        Name of the omega score column (default: 'omega_score')
+    clinical_df : pandas.DataFrame, optional
+        DataFrame with clinical information for stratified sampling
+    outer_splits : int, optional
+        Number of folds for outer cross-validation (default: 10)
+    inner_splits : int, optional
+        Number of folds for inner cross-validation for hyperparameter tuning (default: 5)
+    random_state : int, optional
+        Random seed for reproducibility (default: 42)
+    standardize_features : bool, optional
+        Whether to standardize features (default: True)
+    log_transform : str, optional
+        Type of log transformation to apply to protein features ('log2', 'log10', or None)
+    model_type : str, optional
+        Type of TensorFlow model to use ('TF' for Late Fusion, 'MOE' for Mixture of Experts)
+    num_classes : int, optional
+        Number of output classes (default: 2 for binary cancer detection)
+    batch_size : int, optional
+        Batch size for training (default: 32)
+    epochs : int, optional
+        Maximum number of epochs for training (default: 100)
+    patience : int, optional
+        Patience for early stopping (default: 10)
+    dropout_rate : float, optional
+        Dropout rate for regularization (default: 0.5)
+        
+    Returns:
+    --------
+    dict
+        Dictionary containing cross-validation results
+    """
+    print(f"Starting TensorFlow {model_type} cross-validation for {'cancer detection' if num_classes == 2 else 'tissue localization'}...")
+    
+    if not TENSORFLOW_AVAILABLE:
+        raise ImportError("TensorFlow is required for this model but is not available.")
+    
+    # Include omega score with protein features
+    features = protein_features.copy()
+    if omega_score_col in X.columns:
+        features.append(omega_score_col)
+    
+    # Determine hyperparameter grid for tuning
+    param_grid = {
+        'dropout_rate': [0.3, 0.5, 0.7],
+        'learning_rate': [0.01, 0.001, 0.0001],
+        'units_protein': [32, 64, 128],
+        'units_mutation': [8, 16, 32],
+        'l2_reg': [0.001, 0.01, 0.1]
+    }
+    
+    if model_type == 'MOE':
+        param_grid['num_experts'] = [2, 3, 5]
+    
+    # Create outer folds
+    if clinical_df is not None:
+        print("Creating stratified folds based on clinical data...")
+        fold_assignments = stratified_fold_assignment(clinical_df, n_splits=outer_splits)
+        unique_indices = X.index.unique()
+        fold_indices = []
+        
+        for fold_id in range(outer_splits):
+            fold_patients = fold_assignments[fold_assignments == fold_id].index
+            fold_idx = [i for i, idx in enumerate(X.index) 
+                            if idx in fold_patients]
+            if len(fold_idx) > 0:
+                fold_indices.append(fold_idx)
+        
+        if len(fold_indices) >= 2:
+            train_test_splits = []
+            for i in range(len(fold_indices)):
+                test_idx = fold_indices[i]
+                train_idx = [idx for j, fold in enumerate(fold_indices) for idx in fold if j != i]
+                train_test_splits.append((train_idx, test_idx))
+            
+            outer_cv = KFold(n_splits=len(train_test_splits), shuffle=False)
+            outer_cv.split = lambda X, y=None, groups=None: iter(train_test_splits)
+        else:
+            print("Warning: Not enough valid folds, falling back to StratifiedKFold.")
+            outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=random_state)
+    else:
+        outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=random_state)
+    
+    # Initialize result containers
+    fold_results = []
+    all_probabilities = np.zeros_like(y, dtype=float)
+    if num_classes > 2:
+        all_predictions = np.empty_like(y, dtype=object)
+    else:
+        all_predictions = np.zeros_like(y, dtype=int)
+    
+    # For ROC curve plotting (binary classification)
+    fpr_list = []
+    tpr_list = []
+    
+    # Prepare splits for tqdm
+    splits = list(outer_cv.split(X.values, y))
+    
+    # Perform cross-validation
+    for fold, (train_idx, test_idx) in enumerate(tqdm(splits, desc=f"{model_type} CV folds")):
+        # Extract train/test sets
+        X_train_orig = X.iloc[train_idx].copy()
+        X_test_orig = X.iloc[test_idx].copy()
+        y_train = y[train_idx] if isinstance(y, np.ndarray) else y.iloc[train_idx].values
+        y_test = y[test_idx] if isinstance(y, np.ndarray) else y.iloc[test_idx].values
+        
+        # Extract protein features
+        X_protein_train = X_train_orig[protein_features].copy()
+        X_protein_test = X_test_orig[protein_features].copy()
+        
+        # Apply log transformation if specified
+        if log_transform in ['log2', 'log10']:
+            for feature in protein_features:
+                if feature in X_protein_train.columns:
+                    if log_transform == 'log2':
+                        X_protein_train[feature] = np.log2(X_protein_train[feature] + 1e-10)
+                        X_protein_test[feature] = np.log2(X_protein_test[feature] + 1e-10)
+                    elif log_transform == 'log10':
+                        X_protein_train[feature] = np.log10(X_protein_train[feature] + 1e-10)
+                        X_protein_test[feature] = np.log10(X_protein_test[feature] + 1e-10)
+        
+        # Extract mutation data (omega score)
+        if omega_score_col in X.columns:
+            X_mutation_train = X_train_orig[[omega_score_col]].copy()
+            X_mutation_test = X_test_orig[[omega_score_col]].copy()
+        else:
+            # Create dummy omega score column
+            X_mutation_train = pd.DataFrame(index=X_protein_train.index, columns=[omega_score_col])
+            X_mutation_test = pd.DataFrame(index=X_protein_test.index, columns=[omega_score_col])
+            X_mutation_train[omega_score_col] = 0
+            X_mutation_test[omega_score_col] = 0
+            
+        # Standardize features if requested
+        if standardize_features:
+            # Standardize protein features
+            protein_scaler = StandardScaler()
+            X_protein_train_scaled = protein_scaler.fit_transform(X_protein_train)
+            X_protein_test_scaled = protein_scaler.transform(X_protein_test)
+            
+            # Standardize mutation features
+            mutation_scaler = StandardScaler()
+            X_mutation_train_scaled = mutation_scaler.fit_transform(X_mutation_train)
+            X_mutation_test_scaled = mutation_scaler.transform(X_mutation_test)
+        else:
+            X_protein_train_scaled = X_protein_train.values
+            X_protein_test_scaled = X_protein_test.values
+            X_mutation_train_scaled = X_mutation_train.values
+            X_mutation_test_scaled = X_mutation_test.values
+        
+        # Prepare validation set from training data
+        inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=random_state)
+        inner_split = list(inner_cv.split(X_protein_train_scaled, y_train))[0]  # Take first split for validation
+        val_idx = inner_split[1]
+        
+        # Split training data into train and validation sets
+        X_protein_val = X_protein_train_scaled[val_idx]
+        X_mutation_val = X_mutation_train_scaled[val_idx]
+        y_val = y_train[val_idx]
+        
+        train_val_idx = inner_split[0]
+        X_protein_train_final = X_protein_train_scaled[train_val_idx]
+        X_mutation_train_final = X_mutation_train_scaled[train_val_idx]
+        y_train_final = y_train[train_val_idx]
+        
+        # Initialize best model and best score
+        best_score = -np.inf
+        best_model = None
+        best_history = None
+        best_params = {}
+        
+        # Early stopping callback
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor='val_auc' if num_classes == 2 else 'val_accuracy',
+            patience=patience,
+            restore_best_weights=True,
+            mode='max'
+        )
+        
+        # Simple hyperparameter tuning
+        for dropout in param_grid['dropout_rate']:
+            for lr in param_grid['learning_rate']:
+                for l2_reg in param_grid['l2_reg']:
+                    if model_type == 'MOE':
+                        for num_experts in param_grid['num_experts']:
+                            # Create Mixture of Experts model
+                            model = create_tf_moe_model(
+                                protein_input_shape=(X_protein_train_final.shape[1],),
+                                mutation_input_shape=(X_mutation_train_final.shape[1],),
+                                num_classes=num_classes,
+                                num_experts=num_experts,
+                                dropout_rate=dropout,
+                                l2_reg=l2_reg,
+                                learning_rate=lr
+                            )
+                            
+                            # Train model
+                            history = model.fit(
+                                [X_protein_train_final, X_mutation_train_final],
+                                y_train_final,
+                                validation_data=([X_protein_val, X_mutation_val], y_val),
+                                epochs=epochs,
+                                batch_size=batch_size,
+                                callbacks=[early_stopping],
+                                verbose=0
+                            )
+                            
+                            # Evaluate on validation set
+                            val_score = history.history['val_auc'][-1] if num_classes == 2 else history.history['val_accuracy'][-1]
+                            
+                            # Check if this is the best model so far
+                            if val_score > best_score:
+                                best_score = val_score
+                                best_model = model
+                                best_history = history
+                                best_params = {
+                                    'dropout_rate': dropout,
+                                    'learning_rate': lr,
+                                    'l2_reg': l2_reg,
+                                    'num_experts': num_experts
+                                }
+                    else:  # Late Fusion model
+                        # Create Late Fusion model
+                        model = create_tf_late_fusion_model(
+                            protein_input_shape=(X_protein_train_final.shape[1],),
+                            mutation_input_shape=(X_mutation_train_final.shape[1],),
+                            num_classes=num_classes,
+                            dropout_rate=dropout,
+                            l2_reg=l2_reg,
+                            learning_rate=lr
+                        )
+                        
+                        # Train model
+                        history = model.fit(
+                            [X_protein_train_final, X_mutation_train_final],
+                            y_train_final,
+                            validation_data=([X_protein_val, X_mutation_val], y_val),
+                            epochs=epochs,
+                            batch_size=batch_size,
+                            callbacks=[early_stopping],
+                            verbose=0
+                        )
+                        
+                        # Evaluate on validation set
+                        val_score = history.history['val_auc'][-1] if num_classes == 2 else history.history['val_accuracy'][-1]
+                        
+                        # Check if this is the best model so far
+                        if val_score > best_score:
+                            best_score = val_score
+                            best_model = model
+                            best_history = history
+                            best_params = {
+                                'dropout_rate': dropout,
+                                'learning_rate': lr,
+                                'l2_reg': l2_reg
+                            }
+        
+        # Make predictions on test set using best model
+        y_pred_proba = best_model.predict([X_protein_test_scaled, X_mutation_test_scaled], verbose=0)
+        
+        if num_classes == 2:
+            # Binary classification
+            y_pred_proba = y_pred_proba.flatten()
+            y_pred = (y_pred_proba > 0.5).astype(int)
+            
+            # Store predictions and probabilities
+            all_predictions[test_idx] = y_pred
+            all_probabilities[test_idx] = y_pred_proba
+            
+            # Calculate performance metrics
+            fold_acc = accuracy_score(y_test, y_pred)
+            fold_auc = roc_auc_score(y_test, y_pred_proba)
+            
+            # Calculate ROC curve data for this fold
+            from sklearn.metrics import roc_curve
+            fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+            fpr_list.append(fpr)
+            tpr_list.append(tpr)
+            
+            fold_results.append({
+                'fold': fold,
+                'accuracy': fold_acc,
+                'auc': fold_auc,
+                'best_params': best_params,
+                'test_indices': test_idx
+            })
+        else:
+            # Multi-class classification
+            y_pred_classes = np.argmax(y_pred_proba, axis=1)
+            all_predictions[test_idx] = y_pred_classes
+            
+            # Calculate accuracy for this fold
+            fold_acc = accuracy_score(y_test, y_pred_classes)
+            
+            fold_results.append({
+                'fold': fold,
+                'accuracy': fold_acc,
+                'best_params': best_params,
+                'test_indices': test_idx
+            })
+    
+    # Calculate overall metrics
+    if num_classes == 2:
+        # Binary classification
+        overall_acc = accuracy_score(y, all_predictions)
+        overall_auc = roc_auc_score(y, all_probabilities)
+        
+        # Calculate mean ROC curve for plotting
+        from sklearn.metrics import roc_curve
+        mean_fpr = np.linspace(0, 1, 100)
+        mean_tpr = np.zeros_like(mean_fpr)
+        
+        for i in range(len(fpr_list)):
+            mean_tpr += np.interp(mean_fpr, fpr_list[i], tpr_list[i])
+        
+        mean_tpr /= len(fpr_list)
+        
+        print(f"Completed {model_type} cancer detection model with overall AUC: {overall_auc:.4f}")
+        
+        return {
+            'fold_results': fold_results,
+            'overall_accuracy': overall_acc,
+            'overall_auc': overall_auc,
+            'predictions': all_predictions,
+            'probabilities': all_probabilities,
+            'roc_data': {
+                'mean_fpr': mean_fpr,
+                'mean_tpr': mean_tpr,
+                'fpr_list': fpr_list,
+                'tpr_list': tpr_list
+            }
+        }
+    else:
+        # Multi-class classification
+        overall_acc = accuracy_score(y, all_predictions)
+        print(f"Completed {model_type} tissue localization model with overall accuracy: {overall_acc:.4f}")
+        
+        return {
+            'fold_results': fold_results,
+            'overall_accuracy': overall_acc,
+            'predictions': all_predictions
+        }
+
 def filter_proteins_by_mwu_test(protein_df, clinical_df):
     """
     Filter proteins using Mann-Whitney U test to keep only those with
@@ -1208,10 +1775,8 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
                 model_type='LR'
             )
         else:
-            # Implementation for TensorFlow models would go here
-            print(f"Warning: {detection_model} implementation not available. Falling back to LR.")
-            detection_model = 'LR'
-            detection_results = nested_cross_validation(
+            # Use the TensorFlow model implementation
+            detection_results = tf_cross_validation(
                 X, y_cancer_status, 
                 protein_features=detection_features,
                 omega_score_col='omega_score' if 'omega_score' in X.columns else None,
@@ -1221,7 +1786,8 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
                 random_state=random_state,
                 standardize_features=standardize_features,
                 log_transform=log_transform,
-                model_type='LR'
+                model_type=detection_model,  # 'TF' or 'MOE'
+                num_classes=2  # Binary classification for detection
             )
     else:
         raise ValueError(f"Unsupported detection model type: {detection_model}")
@@ -1289,23 +1855,34 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
                 model_type='RF'
             )
         else:
-            # Implementation for TensorFlow models would go here
-            print(f"Warning: {localization_model} implementation not available. Falling back to RF.")
-            localization_model = 'RF'
-            localization_results = nested_cross_validation_rf(
+            # Get unique cancer types for determining num_classes
+            unique_cancer_types = np.unique(y_cancer_type_filtered)
+            num_classes = len(unique_cancer_types)
+            
+            # Create label encoder for cancer types
+            type_to_idx = {cancer_type: i for i, cancer_type in enumerate(unique_cancer_types)}
+            y_cancer_type_numeric = np.array([type_to_idx[t] for t in y_cancer_type_filtered])
+            
+            # Use the TensorFlow model implementation
+            localization_results = tf_cross_validation(
                 X_cancer, 
-                y_cancer_type_filtered,
+                y_cancer_type_numeric,
                 protein_features=detection_features,
                 omega_score_col='omega_score' if 'omega_score' in X.columns else None,
-                include_gender=True,
                 clinical_df=clinical_df_cancer,
                 outer_splits=outer_splits,
                 inner_splits=inner_splits,
                 random_state=random_state,
                 standardize_features=standardize_features,
                 log_transform=log_transform,
-                model_type='RF'
+                model_type=localization_model,  # 'TF' or 'MOE'
+                num_classes=num_classes  # Multi-class for localization
             )
+            
+            # Convert numeric predictions back to class labels
+            idx_to_type = {i: cancer_type for cancer_type, i in type_to_idx.items()}
+            localization_results['original_predictions'] = localization_results['predictions'].copy()
+            localization_results['predictions'] = np.array([idx_to_type[p] for p in localization_results['predictions']])
     else:
         raise ValueError(f"Unsupported localization model type: {localization_model}")
     
