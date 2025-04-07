@@ -1,0 +1,8 @@
+,Breast,Colorectum,Liver,Lung,Ovary,Pancreas,Upper GI
+Breast,63%,3%,2%,8%,4%,3%,3%
+Colorectum,26%,84%,30%,48%,15%,15%,44%
+Liver,0%,1%,44%,2%,0%,0%,4%
+Lung,4%,2%,0%,39%,2%,1%,4%
+Ovary,3%,0%,0%,2%,79%,0%,0%
+Pancreas,4%,2%,9%,2%,0%,81%,0%
+Upper GI,0%,9%,14%,0%,0%,0%,46%

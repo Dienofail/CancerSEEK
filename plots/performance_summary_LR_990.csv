@@ -1,0 +1,8 @@
+,Test Set Analysis,Estimate %,95% CI,n/N
+Specificity,Specificity,99.0%,"98.1%, 99.6%",804 / 812
+,,,,
+"Sensitivity, all cancers","Sensitivity, all cancers",57.4%,"54.3%, 60.5%","577 / 1,005"
+    Stage I,    Stage I,36.2%,"29.5%, 43.3%",72 / 199
+    Stage II,    Stage II,59.6%,"55.1%, 63.9%",296 / 497
+    Stage III,    Stage III,67.6%,"62.1%, 72.8%",209 / 309
+"    Stage I, II","    Stage I, II",52.9%,"49.1%, 56.6%",368 / 696

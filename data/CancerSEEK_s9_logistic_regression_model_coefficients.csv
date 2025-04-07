@@ -1,0 +1,10 @@
+Feature,Logistic Regression Coefficient,Importance Score
+Ω score,1.77E+00,7.55E+00
+CA-125,4.15E-02,1.37E+00
+CEA,2.33E-04,1.17E+00
+CA19-9,1.20E-02,5.18E-01
+Prolactin,3.51E-05,4.76E-01
+HGF,2.45E-03,3.03E-01
+OPN,1.45E-05,1.72E-01
+Myeloperoxidase,5.40E-03,9.31E-02
+TIMP-1,7.34E-06,7.05E-02

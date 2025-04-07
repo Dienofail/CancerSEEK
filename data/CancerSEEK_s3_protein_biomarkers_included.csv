@@ -1,0 +1,42 @@
+Protein,Evaluated in this study,Included in CancerSEEK test,Used for cancer type identification
+AFP,Yes,No,Yes
+Angiopoietin-2,Yes,No,Yes
+AXL,Yes,No,Yes
+CA-125,Yes,Yes,Yes
+CA 15-3,Yes,No,Yes
+CA19-9,Yes,Yes,Yes
+CD44,Yes,No,Yes
+CEA,Yes,Yes,Yes
+CYFRA 21-1,Yes,No,Yes
+DKK1,Yes,No,Yes
+Endoglin,Yes,No,Yes
+FGF2,Yes,No,Yes
+Follistatin,Yes,No,Yes
+Galectin-3,Yes,No,Yes
+G-CSF,Yes,No,Yes
+GDF15,Yes,No,Yes
+HE4,Yes,No,Yes
+HGF,Yes,Yes,Yes
+IL-6,Yes,No,Yes
+IL-8,Yes,No,Yes
+Kallikrein-6,Yes,No,Yes
+Leptin,Yes,No,Yes
+LRG-1,No,No,No
+Mesothelin,Yes,No,Yes
+Midkine,Yes,No,Yes
+Myeloperoxidase,Yes,Yes,Yes
+NSE,Yes,No,Yes
+OPG,Yes,No,Yes
+OPN,Yes,Yes,Yes
+PAR,Yes,No,Yes
+Prolactin,Yes,Yes,Yes
+sEGFR,Yes,No,Yes
+sFas,Yes,No,Yes
+SHBG,Yes,No,Yes
+sHER2/sEGFR2/sErbB2,Yes,No,Yes
+sPECAM-1,Yes,No,Yes
+TGFa,Yes,No,Yes
+Thrombospondin-2,Yes,No,Yes
+TIMP-1,Yes,Yes,Yes
+TIMP-2,Yes,No,Yes
+Vitronectin,No,No,No
