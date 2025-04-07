@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import roc_curve, auc, confusion_matrix
+from sklearn.metrics import roc_curve, auc, confusion_matrix, f1_score, accuracy_score
 from scipy.stats import norm
 import statsmodels.stats.proportion as smp
 from matplotlib.patches import Patch
@@ -567,7 +567,7 @@ def plot_sensitivity_by_stage(sensitivity_df, figsize=(10, 6), model_type=None):
 
 def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_type=None):
     """
-    Create a CSV summary of the performance metrics similar to the format in the paper.
+    Create a CSV summary of the performance metrics with proper formatting.
     
     Parameters:
     -----------
@@ -583,8 +583,8 @@ def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_t
     pd.DataFrame
         DataFrame with formatted performance metrics
     """
-    # Create a new DataFrame for the summary
-    summary_df = pd.DataFrame()
+    # Create a new DataFrame for the summary with proper row indexing
+    summary_df = pd.DataFrame(columns=["Estimate %", "95% CI", "n/N"])
     
     # Extract specificity info
     spec_row = sensitivity_by_stage_df.iloc[0]
@@ -596,12 +596,9 @@ def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_t
     spec_N = spec_row['Total_Negatives']
     
     # Format the specificity row
-    summary_df.loc['Specificity', 'Estimate %'] = f"{spec*100:.1f}%"
-    summary_df.loc['Specificity', '95% CI'] = f"{spec_ci_low*100:.1f}%, {spec_ci_high*100:.1f}%"
-    summary_df.loc['Specificity', 'n/N'] = f"{spec_n:,} / {spec_N:,}"
-    
-    # Add a blank row
-    summary_df.loc['', :] = ''
+    summary_df.loc["specificity", "Estimate %"] = f"{spec*100:.1f}%"
+    summary_df.loc["specificity", "95% CI"] = f"{spec_ci_low*100:.1f}%, {spec_ci_high*100:.1f}%"
+    summary_df.loc["specificity", "n/N"] = f"{spec_n:,} / {spec_N:,}"
     
     # Extract sensitivity for all cancers
     all_cancers = sensitivity_by_stage_df[sensitivity_by_stage_df['Stage'] == 'All Stages'].iloc[0]
@@ -612,12 +609,13 @@ def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_t
     sens_all_N = all_cancers['Total_Positives']
     
     # Format the all cancers sensitivity row
-    summary_df.loc['Sensitivity, all cancers', 'Estimate %'] = f"{sens_all*100:.1f}%"
-    summary_df.loc['Sensitivity, all cancers', '95% CI'] = f"{sens_all_ci_low*100:.1f}%, {sens_all_ci_high*100:.1f}%"
-    summary_df.loc['Sensitivity, all cancers', 'n/N'] = f"{sens_all_n:,} / {sens_all_N:,}"
+    summary_df.loc["sensitivity-all", "Estimate %"] = f"{sens_all*100:.1f}%"
+    summary_df.loc["sensitivity-all", "95% CI"] = f"{sens_all_ci_low*100:.1f}%, {sens_all_ci_high*100:.1f}%"
+    summary_df.loc["sensitivity-all", "n/N"] = f"{sens_all_n:,} / {sens_all_N:,}"
     
     # Extract and format sensitivity by stage
-    for stage in ['I', 'II', 'III', 'IV']:
+    for stage, stage_name in [('I', 'sensitivity-stage1'), ('II', 'sensitivity-stage2'), 
+                              ('III', 'sensitivity-stage3'), ('IV', 'sensitivity-stage4')]:
         stage_row = sensitivity_by_stage_df[sensitivity_by_stage_df['Stage'] == stage]
         if len(stage_row) > 0:
             stage_data = stage_row.iloc[0]
@@ -627,9 +625,9 @@ def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_t
             sens_n = stage_data['True_Positives']
             sens_N = stage_data['Total_Positives']
             
-            summary_df.loc[f'    Stage {stage}', 'Estimate %'] = f"{sens*100:.1f}%"
-            summary_df.loc[f'    Stage {stage}', '95% CI'] = f"{sens_ci_low*100:.1f}%, {sens_ci_high*100:.1f}%"
-            summary_df.loc[f'    Stage {stage}', 'n/N'] = f"{sens_n:,} / {sens_N:,}"
+            summary_df.loc[stage_name, "Estimate %"] = f"{sens*100:.1f}%"
+            summary_df.loc[stage_name, "95% CI"] = f"{sens_ci_low*100:.1f}%, {sens_ci_high*100:.1f}%"
+            summary_df.loc[stage_name, "n/N"] = f"{sens_n:,} / {sens_N:,}"
     
     # Handle Stage I, II combined if we have both stages
     if 'I' in sensitivity_by_stage_df['Stage'].values and 'II' in sensitivity_by_stage_df['Stage'].values:
@@ -649,12 +647,12 @@ def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_t
         # Calculate CI for combined
         combined_ci_low, combined_ci_high = smp.proportion_confint(combined_tp, combined_total, alpha=0.05, method='beta')
         
-        summary_df.loc['    Stage I, II', 'Estimate %'] = f"{combined_sens*100:.1f}%"
-        summary_df.loc['    Stage I, II', '95% CI'] = f"{combined_ci_low*100:.1f}%, {combined_ci_high*100:.1f}%"
-        summary_df.loc['    Stage I, II', 'n/N'] = f"{combined_tp:,} / {combined_total:,}"
+        summary_df.loc["sensitivity-stage1-2", "Estimate %"] = f"{combined_sens*100:.1f}%"
+        summary_df.loc["sensitivity-stage1-2", "95% CI"] = f"{combined_ci_low*100:.1f}%, {combined_ci_high*100:.1f}%"
+        summary_df.loc["sensitivity-stage1-2", "n/N"] = f"{combined_tp:,} / {combined_total:,}"
     
-    # Insert the "Test Set Analysis" column at the beginning
-    summary_df.insert(0, 'Test Set Analysis', summary_df.index)
+    # Reset index and add row number index
+    summary_df = summary_df.reset_index().rename(columns={"index": "Row"})
     
     # Add specificity to filename if provided
     spec_suffix = f"_{int(spec_rounded*1000)}"
@@ -665,8 +663,8 @@ def create_performance_summary_csv(sensitivity_by_stage_df, output_path, model_t
         base_name = output_path.rsplit('.', 1)[0]
         output_path = f"{base_name}{spec_suffix}.csv"
     
-    # Save to CSV
-    summary_df.to_csv(output_path)
+    # Save to CSV with properly quoted strings
+    summary_df.to_csv(output_path, index=True, quoting=1)  # quoting=1 is QUOTE_ALL
     
     return summary_df
 
@@ -996,3 +994,148 @@ def plot_multiple_roc_curves(data_files, labels=None, colors=None, figsize=(12, 
         plt.savefig(save_path, bbox_inches='tight')
     
     return fig, ax
+
+def plot_tissue_localization_confusion_matrix(y_true, y_pred, cancer_types=None, figsize=(12, 10),
+                                             detection_model=None, localization_model=None, 
+                                             normalize=None, save_path=None):
+    """
+    Plot confusion matrix for tissue localization.
+    
+    Parameters:
+    -----------
+    y_true : array-like
+        True cancer types
+    y_pred : array-like
+        Predicted cancer types
+    cancer_types : list, optional
+        List of cancer type names. If None, inferred from unique values in y_true and y_pred
+    figsize : tuple, optional
+        Figure size
+    detection_model : str, optional
+        Type of model used for detection (e.g., 'LR', 'XGB')
+    localization_model : str, optional
+        Type of model used for tissue localization (e.g., 'RF', 'XGB')
+    normalize : str, optional
+        Normalization method ('true', 'pred', 'all'), or None for raw counts
+    save_path : str, optional
+        Path to save the confusion matrix plot
+        
+    Returns:
+    --------
+    fig : matplotlib.figure.Figure
+        Figure object
+    ax : matplotlib.axes.Axes
+        Axes object
+    metrics : dict
+        Dictionary containing accuracy and F1 scores
+    """
+    # Check that the inputs have the same length
+    if len(y_true) != len(y_pred):
+        raise ValueError(f"Length mismatch: y_true has {len(y_true)} elements but y_pred has {len(y_pred)} elements")
+        
+    # If cancer_types not provided, infer from y_true and y_pred
+    if cancer_types is None:
+        cancer_types = sorted(np.union1d(np.unique(y_true), np.unique(y_pred)))
+    
+    # Print debug info
+    print(f"Number of samples: {len(y_true)}")
+    print(f"Cancer types for matrix: {cancer_types}")
+    
+    # Create numeric mappings for cancer types
+    type_to_idx = {cancer_type: i for i, cancer_type in enumerate(cancer_types)}
+    
+    # Convert cancer types to class indices for metrics calculation
+    y_true_numeric = np.array([type_to_idx.get(t, -1) for t in y_true])
+    y_pred_numeric = np.array([type_to_idx.get(p, -1) for p in y_pred])
+    
+    # Filter out any samples with unknown types (-1 index)
+    valid_samples = (y_true_numeric >= 0) & (y_pred_numeric >= 0)
+    
+    # Check if we have valid samples
+    if not np.any(valid_samples):
+        raise ValueError("No valid samples found after filtering. Cannot create confusion matrix.")
+    
+    # Apply filtering
+    y_true_filtered = y_true_numeric[valid_samples]
+    y_pred_filtered = y_pred_numeric[valid_samples]
+    
+    # Calculate metrics
+    accuracy = accuracy_score(y_true_filtered, y_pred_filtered)
+    macro_f1 = f1_score(y_true_filtered, y_pred_filtered, average='macro')
+    micro_f1 = f1_score(y_true_filtered, y_pred_filtered, average='micro')
+    
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true_filtered, y_pred_filtered, labels=range(len(cancer_types)))
+    
+    # Normalize if requested
+    if normalize == 'true':
+        cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        cm_display = cm_normalized
+        fmt = '.2f'
+        vmin, vmax = 0, 1
+        cmap = 'Blues'
+        title_suffix = " (Normalized by True Label)"
+    elif normalize == 'pred':
+        cm_normalized = cm.astype('float') / cm.sum(axis=0)[np.newaxis, :]
+        cm_display = cm_normalized
+        fmt = '.2f'
+        vmin, vmax = 0, 1
+        cmap = 'Blues'
+        title_suffix = " (Normalized by Prediction)"
+    elif normalize == 'all':
+        cm_normalized = cm.astype('float') / cm.sum()
+        cm_display = cm_normalized
+        fmt = '.3f'
+        vmin, vmax = 0, 1
+        cmap = 'Blues'
+        title_suffix = " (Normalized)"
+    else:
+        cm_display = cm
+        fmt = 'd'
+        vmin, vmax = None, None
+        cmap = 'Blues'
+        title_suffix = ""
+    
+    # Create figure and axes
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Plot heatmap
+    sns.heatmap(cm_display, annot=True, fmt=fmt, cmap=cmap, 
+                xticklabels=cancer_types, yticklabels=cancer_types,
+                vmin=vmin, vmax=vmax, ax=ax)
+    
+    # Customize axes
+    ax.set_xlabel('Predicted Cancer Type')
+    ax.set_ylabel('True Cancer Type')
+    
+    # Update title with model types if provided
+    title = "Tissue Localization Confusion Matrix"
+    if detection_model and localization_model:
+        title = f"Tissue Localization Confusion Matrix ({localization_model} model)"
+    
+    title += title_suffix
+    
+    # Create a subtitle with metrics
+    metrics_text = f"Accuracy: {accuracy:.3f}, Macro F1: {macro_f1:.3f}, Micro F1: {micro_f1:.3f}"
+    
+    # Set the main title with metrics as subtitle
+    ax.set_title(f"{title}\n{metrics_text}", pad=15)
+    
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45, ha='right')
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save plot if requested
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight')
+    
+    # Return metrics for further use
+    metrics = {
+        'accuracy': accuracy,
+        'macro_f1': macro_f1,
+        'micro_f1': micro_f1
+    }
+    
+    return fig, ax, metrics

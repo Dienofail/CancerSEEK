@@ -1,0 +1,173 @@
+Run started at: Mon Apr  7 00:33:09 PDT 2025
+Parameters: detection-model=XGB, localization-model=XGB, target-spec=994
+-------------------------------------------------
+Using target specificity: 0.994
+Loading supplemental data...
+Processing patient information...
+
+Debug - Clinical df columns: ['Patient_ID', 'Sample_ID', 'Primary_tumor_sample_ID', 'Age', 'Sex', 'Race', 'Tumor_type', 'AJCC_Stage', 'Histopathology', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration', 'CancerSEEK_Logistic_Regression_Score', 'CancerSEEK_Test_Result']
+
+Debug - Mutations df columns: ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration', 'Mutation_identified_in_plasma', 'omega_score', 'Mutant_AF', 'per_mL_plasma'] ...
+
+Debug - Protein df columns: ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 'AFP', 'Angiopoietin-2', 'AXL', 'CA-125', 'CA_15-3', 'CA19-9'] ...
+Extracting protein measurements...
+
+Debug - Number of protein columns: 39
+Debug - First few protein columns: ['AFP', 'Angiopoietin-2', 'AXL', 'CA-125', 'CA_15-3']
+
+Debug - Shape after merging protein data: (1817, 53)
+Debug - Data df columns after protein merge: ['Patient_ID', 'Sample_ID', 'Primary_tumor_sample_ID', 'Age', 'Sex', 'Race', 'Tumor_type', 'AJCC_Stage', 'Histopathology', 'Plasma_volume_(mL)'] ...
+Checking for omega_score...
+
+Debug - Found omega_score in mutations_df. Shape: (1817, 3)
+
+Debug - Final data shape: (1817, 54)
+Debug - First few columns: ['Patient_ID', 'Sample_ID', 'Primary_tumor_sample_ID', 'Age', 'Sex', 'Race', 'Tumor_type', 'AJCC_Stage', 'Histopathology', 'Plasma_volume_(mL)']
+Handling missing values...
+
+Debug - Feature columns: ['Age', 'AFP', 'Angiopoietin-2', 'AXL', 'CA-125'] ...
+Debug - Number of feature columns: 41
+
+Debug - X shape: (1817, 45)
+Debug - X columns: ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 'Age', 'AFP', 'Angiopoietin-2', 'AXL', 'CA-125', 'CA_15-3'] ...
+
+==== Starting model training and evaluation ====
+Training combined cancer detection (XGB) and localization (XGB) model with 1817 samples
+Using 8 protein features for detection model
+Performing 10-fold outer CV and 4-fold inner CV
+Standardization: False, Log transformation: none
+
+=== PHASE 1: Cancer Detection Model (XGB) ===
+Starting nested cross-validation for cancer detection using XGB...
+Creating stratified folds based on clinical data...
+Warning: Not enough valid folds from clinical data, falling back to StratifiedKFold.
+XGB cancer detection CV folds:   0%|          | 0/10 [00:00<?, ?it/s]Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+XGB cancer detection CV folds:  10%|█         | 1/10 [00:04<00:37,  4.17s/it]XGB cancer detection CV folds:  20%|██        | 2/10 [00:07<00:27,  3.42s/it]XGB cancer detection CV folds:  30%|███       | 3/10 [00:10<00:22,  3.22s/it]XGB cancer detection CV folds:  40%|████      | 4/10 [00:12<00:18,  3.10s/it]XGB cancer detection CV folds:  50%|█████     | 5/10 [00:15<00:15,  3.02s/it]XGB cancer detection CV folds:  60%|██████    | 6/10 [00:18<00:11,  2.98s/it]XGB cancer detection CV folds:  70%|███████   | 7/10 [00:21<00:08,  2.94s/it]XGB cancer detection CV folds:  80%|████████  | 8/10 [00:24<00:05,  2.90s/it]XGB cancer detection CV folds:  90%|█████████ | 9/10 [00:27<00:02,  2.88s/it]XGB cancer detection CV folds: 100%|██████████| 10/10 [00:30<00:00,  2.89s/it]XGB cancer detection CV folds: 100%|██████████| 10/10 [00:30<00:00,  3.01s/it]
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Completed cancer detection model with overall AUC: 0.8423
+
+Detected 634 cancer samples out of 1005 true cancer samples
+
+=== PHASE 2: Tissue Localization Model (XGB) ===
+Starting nested cross-validation for tissue localization using XGB...
+Encoding cancer type labels for XGBoost...
+Original classes: ['Breast' 'Colorectum' 'Esophagus' 'Liver' 'Lung' 'Ovary' 'Pancreas'
+ 'Stomach']
+Encoded classes: [0, 1, 2, 3, 4, 5, 6, 7]
+Sample encoded values: [1 1 1 1 1]
+Creating stratified folds for tissue localization...
+Warning: Not enough valid folds from clinical data, falling back to StratifiedKFold.
+XGB tissue localization CV folds:   0%|          | 0/10 [00:00<?, ?it/s]XGB tissue localization CV folds:  10%|█         | 1/10 [00:09<01:28,  9.86s/it]XGB tissue localization CV folds:  20%|██        | 2/10 [00:20<01:21, 10.14s/it]XGB tissue localization CV folds:  30%|███       | 3/10 [00:30<01:11, 10.19s/it]XGB tissue localization CV folds:  40%|████      | 4/10 [00:40<01:01, 10.24s/it]XGB tissue localization CV folds:  50%|█████     | 5/10 [00:51<00:51, 10.28s/it]XGB tissue localization CV folds:  60%|██████    | 6/10 [01:01<00:41, 10.32s/it]XGB tissue localization CV folds:  70%|███████   | 7/10 [01:11<00:30, 10.33s/it]XGB tissue localization CV folds:  80%|████████  | 8/10 [01:22<00:20, 10.41s/it]XGB tissue localization CV folds:  90%|█████████ | 9/10 [01:33<00:10, 10.58s/it]XGB tissue localization CV folds: 100%|██████████| 10/10 [01:43<00:00, 10.49s/it]XGB tissue localization CV folds: 100%|██████████| 10/10 [01:43<00:00, 10.37s/it]
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Completed tissue localization model with overall accuracy: 0.5363
+
+=== Combining results from both models ===
+Final results: Detection accuracy: 0.7727, Localization accuracy: 0.5363
+
+==== Model training complete ====
+Generating plots...
+
+==== Debugging localization_results ====
+Type of combined_results: <class 'dict'>
+Type of localization_results: <class 'dict'>
+Keys in localization_results: dict_keys(['fold_results', 'overall_accuracy', 'predictions', 'confusion_matrices', 'overall_confusion_matrix', 'classes', 'feature_importances'])
+Type of predictions: <class 'numpy.ndarray'>
+Shape of predictions: (634,)
+predictions is a numpy array, not a DataFrame/Series with an index
+Saved ROC curve to plots/roc_curve_XGB_994.pdf
+Saved ROC curve data to plots/roc_curve_data_XGB_994.pkl
+Saved sensitivity by subtype to plots/sensitivity_by_subtype_XGB_994.pdf
+Saved sensitivity by stage to plots/sensitivity_by_stage_XGB_994.pdf
+Saved performance summary to plots/performance_summary_XGB_994.csv
+Processing tissue localization results...
+
+==== Debug: Tissue localization data ====
+Number of positive indices: 422
+Max positive index: 1814
+Predictions array length: 634
+Predictions array type: <class 'numpy.ndarray'>
+First few values in predictions: ['Colorectum' 'Colorectum' 'Colorectum' 'Colorectum' 'Colorectum']
+Saved tissue localization accuracy to plots/tissue_localization_accuracy_XGB_XGB.pdf
+Number of samples: 250
+Cancer types for matrix: ['Colorectum', 'Lung', 'Breast', 'Pancreas', 'Ovary', 'Esophagus', 'Liver', 'Stomach']
+Saved tissue localization confusion matrix to plots/tissue_localization_confusion_matrix_XGB_XGB.pdf
+Localization metrics: Accuracy=0.428, Macro-F1=0.106, Micro-F1=0.428
+
+==== All processing complete ====

@@ -60,6 +60,17 @@ def normalize_protein_data(protein_df, clinical_df, detection_limits=None, train
                         'CancerSEEK_Logistic_Regression_Score', 'CancerSEEK_Test_Result']
     protein_cols = [col for col in normalized_df.columns if col not in non_protein_cols]
     
+    # Filter out non-numeric columns to prevent errors
+    numeric_protein_cols = []
+    for col in protein_cols:
+        if pd.api.types.is_numeric_dtype(normalized_df[col]) and not pd.api.types.is_bool_dtype(normalized_df[col]):
+            numeric_protein_cols.append(col)
+        else:
+            print(f"Warning: Column '{col}' is not numeric or is boolean. Skipping normalization for this column.")
+    
+    # Use only numeric protein columns for further processing
+    protein_cols = numeric_protein_cols
+    
     # Identify normal samples from clinical data
     normal_samples = clinical_df[clinical_df['Tumor_type'] == 'Normal']['Patient_ID'].tolist()
     
@@ -102,10 +113,18 @@ def normalize_protein_data(protein_df, clinical_df, detection_limits=None, train
             # Calculate the 95th percentile among normal samples in the training set
             # Check if we have valid training indices before calculating
             if len(training_indices) > 0:
-                percentile_values_dict[protein] = normalized_df.loc[training_indices, protein].quantile(0.95)
+                try:
+                    percentile_values_dict[protein] = normalized_df.loc[training_indices, protein].quantile(0.95)
+                except TypeError:
+                    print(f"Warning: Cannot calculate percentile for column '{protein}'. Using median instead.")
+                    percentile_values_dict[protein] = normalized_df.loc[training_indices, protein].median()
             else:
                 # Fallback to overall 95th percentile if no training indices
-                percentile_values_dict[protein] = normalized_df[protein].quantile(0.95)
+                try:
+                    percentile_values_dict[protein] = normalized_df[protein].quantile(0.95)
+                except TypeError:
+                    print(f"Warning: Cannot calculate percentile for column '{protein}'. Using median instead.")
+                    percentile_values_dict[protein] = normalized_df[protein].median()
         
         # Apply the second part of normalization (set to 0 if below 95th percentile of normal samples)
         normalized_df[protein] = normalized_df[protein].apply(
@@ -167,14 +186,26 @@ def normalize_mutation_data(mutation_df, clinical_df, detection_limits=None, tra
         # Use min and max as proxies for lower and upper detection limits
         # But only calculate from training indices to prevent data leakage
         if len(training_indices) > 0 and 'omega_score' in normalized_df.columns:
-            training_data = normalized_df.loc[training_indices, 'omega_score']
-            lower_limit = training_data.min()
-            upper_limit = training_data.max()
+            # Check if omega_score is a valid numeric type
+            if (pd.api.types.is_numeric_dtype(normalized_df['omega_score']) and 
+                not pd.api.types.is_bool_dtype(normalized_df['omega_score'])):
+                training_data = normalized_df.loc[training_indices, 'omega_score']
+                lower_limit = training_data.min()
+                upper_limit = training_data.max()
+            else:
+                print("Warning: 'omega_score' column is not numeric or is boolean. Using defaults.")
+                lower_limit, upper_limit = 0, 1
         else:
             # Fallback if no training indices or omega_score column
             if 'omega_score' in normalized_df.columns:
-                lower_limit = normalized_df['omega_score'].min()
-                upper_limit = normalized_df['omega_score'].max()
+                # Check if omega_score is a valid numeric type
+                if (pd.api.types.is_numeric_dtype(normalized_df['omega_score']) and 
+                    not pd.api.types.is_bool_dtype(normalized_df['omega_score'])):
+                    lower_limit = normalized_df['omega_score'].min()
+                    upper_limit = normalized_df['omega_score'].max()
+                else:
+                    print("Warning: 'omega_score' column is not numeric or is boolean. Using defaults.")
+                    lower_limit, upper_limit = 0, 1
             else:
                 print("Warning: 'omega_score' column not found. Using defaults.")
                 lower_limit, upper_limit = 0, 1
@@ -184,7 +215,15 @@ def normalize_mutation_data(mutation_df, clinical_df, detection_limits=None, tra
     
     # Apply normalization (clipping values to detection limits)
     if 'omega_score' in normalized_df.columns:
-        normalized_df['omega_score'] = normalized_df['omega_score'].clip(lower=lower_limit, upper=upper_limit)
+        # Check if omega_score is a valid numeric type for clipping
+        if (pd.api.types.is_numeric_dtype(normalized_df['omega_score']) and 
+            not pd.api.types.is_bool_dtype(normalized_df['omega_score'])):
+            try:
+                normalized_df['omega_score'] = normalized_df['omega_score'].clip(lower=lower_limit, upper=upper_limit)
+            except TypeError:
+                print("Warning: Unable to clip 'omega_score'. Keeping original values.")
+        else:
+            print("Warning: 'omega_score' column is not numeric or is boolean. Skipping normalization.")
     else:
         print("Warning: 'omega_score' column not found. Skipping normalization.")
     
@@ -767,75 +806,79 @@ def nested_cross_validation_rf(X, y, protein_features=None, omega_score_col='ome
         Dictionary containing nested cross-validation results
     """
     print(f"Starting nested cross-validation for tissue localization using {model_type}...")
-    # If protein features not specified, use all available
+    # Check if protein_features is None, use all columns except excluded ones
     if protein_features is None:
         non_protein_cols = ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 
                             'CancerSEEK_Logistic_Regression_Score', 'CancerSEEK_Test_Result',
-                            'is_cancer', 'Age', 'Race', 'Sex']
-        protein_features = [col for col in X.columns if col not in non_protein_cols 
-                         and col != omega_score_col]
+                            'omega_score', 'is_cancer']
+        candidate_protein_features = [col for col in X.columns if col not in non_protein_cols]
+        
+        # Filter out boolean and non-numeric columns
+        protein_features = []
+        for col in candidate_protein_features:
+            if (pd.api.types.is_numeric_dtype(X[col]) and 
+                not pd.api.types.is_bool_dtype(X[col])):
+                protein_features.append(col)
+            else:
+                print(f"Warning: Column '{col}' is not numeric or is boolean. Excluding from RF features.")
     
-    # Create list of features to use
+    # Include gender feature if requested
+    gender_col = None
+    if include_gender and 'Sex' in X.columns:
+        gender_col = 'Sex'
+        # Check if gender is already numeric
+        if not pd.api.types.is_numeric_dtype(X[gender_col]):
+            print(f"Warning: Sex column is not numeric. Will convert to numeric.")
+    
     features = protein_features.copy()
     if omega_score_col in X.columns:
-        features.append(omega_score_col)
+        # Check if omega_score is numeric before including
+        if (pd.api.types.is_numeric_dtype(X[omega_score_col]) and 
+            not pd.api.types.is_bool_dtype(X[omega_score_col])):
+            features.append(omega_score_col)
+        else:
+            print(f"Warning: '{omega_score_col}' is not numeric or is boolean. Excluding from RF features.")
     
-    # Add gender if requested and available
-    gender_col = 'Sex'
-    has_gender = gender_col in X.columns
+    print(f"Using {len(features)} features for RF model")
     
-    # Separate protein data and mutation data
-    X_protein = X[protein_features].copy()
-    
-    # Check if mutation data (omega score) exists
-    has_mutation_data = omega_score_col in X.columns
-    if has_mutation_data:
-        X_mutation = X[[omega_score_col]].copy()
-    
-    # For XGBoost, perform label encoding since it requires numeric labels
+    # If using XGBoost, set up parameters
     if model_type == 'XGB':
-        # Get unique cancer types and create a mapping
+        param_grid = {
+            'max_depth': [3, 5, 7],
+            'learning_rate': [0.01, 0.05, 0.1],
+            'n_estimators': [50, 100, 200],
+            'gamma': [0, 0.1, 0.2],
+            'subsample': [0.8, 0.9, 1.0],
+            'colsample_bytree': [0.8, 0.9, 1.0]
+        }
+        base_model = XGBClassifier(random_state=random_state, eval_metric='mlogloss')
+        
+        # For XGBoost, perform label encoding since it requires numeric labels
         print("Encoding cancer type labels for XGBoost...")
         unique_classes = np.unique(y)
         class_to_index = {cls: i for i, cls in enumerate(unique_classes)}
         index_to_class = {i: cls for cls, i in class_to_index.items()}
         
         # Convert string labels to numeric
-        y_encoded = np.array([class_to_index[label] for label in y])
+        if isinstance(y, pd.Series):
+            y_for_training = np.array([class_to_index[label] for label in y.values])
+        else:
+            y_for_training = np.array([class_to_index[label] for label in y])
         
-        # Debug
-        print(f"Original classes: {unique_classes}")
-        print(f"Encoded classes: {list(range(len(unique_classes)))}")
-        print(f"Sample encoded values: {y_encoded[:5] if len(y_encoded) >= 5 else y_encoded}")
-        
-        # Use encoded labels instead of original
-        y_for_training = y_encoded
         classes = unique_classes
-    else:
+    else:  # Random Forest
+        param_grid = {
+            'n_estimators': [50, 100, 200],
+            'max_depth': [5, 10, 15, None],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2', None]
+        }
+        base_model = RandomForestClassifier(random_state=random_state)
+        
         # Random Forest can handle string labels directly
         y_for_training = y
         classes = np.unique(y)
-    
-    # Parameter grid based on model type
-    if model_type == 'RF':
-        param_grid = {
-            'n_estimators': [10, 15, 20, 25, 30, 35, 40, 45, 50, 100, 200],
-            'max_depth': [None, 10, 20, 30],
-            'min_samples_split': [2, 5, 10, 20],
-            'min_samples_leaf': [1, 2, 4, 8, 16]
-        }
-        base_model = RandomForestClassifier(class_weight='balanced', random_state=random_state)
-    elif model_type == 'XGB':
-        param_grid = {
-            'n_estimators': [25, 50, 75, 100],
-            'learning_rate': [0.001, 0.01, 0.05, 0.1],
-            'max_depth': [5, 7, 9],
-            'subsample': [0.8, 0.9, 1.0],
-            'colsample_bytree': [0.8, 0.9, 1.0]
-        }
-        base_model = XGBClassifier(random_state=random_state, eval_metric='mlogloss')
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}. Use 'RF' or 'XGB'.")
     
     # Create outer folds
     if clinical_df is not None:
@@ -882,11 +925,11 @@ def nested_cross_validation_rf(X, y, protein_features=None, omega_score_col='ome
     feature_importances = []
     
     # Prepare splits for tqdm
-    splits = list(outer_cv.split(X.values, y_for_training))  # Use encoded labels for stratification if XGBoost
+    splits = list(outer_cv.split(X.values, y_for_training))  # Use y_for_training for stratification
     
     # Perform nested cross-validation
     for fold, (train_idx, test_idx) in enumerate(tqdm(splits, desc=f"{model_type} tissue localization CV folds")):
-        # Get original data for this fold
+        # Access the original data for proper normalization
         X_train_orig = X.iloc[train_idx].copy()
         X_test_orig = X.iloc[test_idx].copy()
         
@@ -1085,7 +1128,8 @@ def nested_cross_validation_rf(X, y, protein_features=None, omega_score_col='ome
 def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type, clinical_df=None,
                                                outer_splits=10, inner_splits=5, random_state=42,
                                                standardize_features=True, log_transform=None,
-                                               detection_model='LR', localization_model='RF'):
+                                               detection_model='LR', localization_model='RF',
+                                               detection_features=None):
     """
     Perform combined cancer detection and tissue localization with nested cross-validation
     for proper hyperparameter optimization of both models.
@@ -1114,6 +1158,8 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
         Type of model to use for cancer detection ('LR', 'XGB', 'TF', 'MOE', default: 'LR')
     localization_model : str, optional
         Type of model to use for tissue localization ('RF', 'XGB', 'TF', 'MOE', default: 'RF')
+    detection_features : list, optional
+        List of features to use for the detection model (if None, use default protein features)
         
     Returns:
     --------
@@ -1139,6 +1185,14 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
     # Proteins from the paper for LR model
     lr_proteins = ['CA-125', 'CA19-9', 'CEA', 'HGF', 'Myeloperoxidase', 'OPN', 'Prolactin', 'TIMP-1']
     
+    # Use provided detection features if available, otherwise use default proteins
+    if detection_features is not None:
+        print(f"Using {len(detection_features)} custom features for detection model")
+        detection_protein_features = detection_features
+    else:
+        print(f"Using {len(lr_proteins)} default protein features for detection model")
+        detection_protein_features = lr_proteins
+    
     # Create fold assignments for consistent partitioning
     if clinical_df is not None:
         fold_assignments = stratified_fold_assignment(clinical_df, n_splits=outer_splits)
@@ -1151,7 +1205,7 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
         # Use TensorFlow fusion model
         lr_results = nested_cross_validation_tf(
             X, y_cancer_status, 
-            protein_features=lr_proteins,
+            protein_features=detection_protein_features,
             omega_score_col='omega_score',
             clinical_df=clinical_df,
             outer_splits=outer_splits,
@@ -1165,7 +1219,7 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
         # Use Mixture of Experts model
         lr_results = nested_cross_validation_moe(
             X, y_cancer_status, 
-            protein_features=lr_proteins,
+            protein_features=detection_protein_features,
             omega_score_col='omega_score',
             clinical_df=clinical_df,
             outer_splits=outer_splits,
@@ -1179,7 +1233,7 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
         # Use traditional models (LR or XGB)
         lr_results = nested_cross_validation(
             X, y_cancer_status, 
-            protein_features=lr_proteins,
+            protein_features=detection_protein_features,
             clinical_df=clinical_df,
             outer_splits=outer_splits,
             inner_splits=inner_splits,
@@ -1228,8 +1282,19 @@ def combined_cancer_detection_and_localization(X, y_cancer_status, y_cancer_type
                          'CancerSEEK_Logistic_Regression_Score', 'CancerSEEK_Test_Result',
                          'is_cancer', 'Age', 'Race', 'Sex']
     omega_score_col = 'omega_score'
-    protein_features = [col for col in X_cancer.columns if col not in non_protein_cols 
-                       and col != omega_score_col]
+    candidate_protein_features = [col for col in X_cancer.columns if col not in non_protein_cols 
+                   and col != omega_score_col]
+
+    # Filter out boolean and non-numeric columns from protein features
+    protein_features = []
+    for col in candidate_protein_features:
+        if (pd.api.types.is_numeric_dtype(X_cancer[col]) and 
+            not pd.api.types.is_bool_dtype(X_cancer[col])):
+            protein_features.append(col)
+        else:
+            print(f"Warning: Column '{col}' is not numeric or is boolean. Excluding from tissue localization features.")
+
+    print(f"Using {len(protein_features)} numeric protein features for tissue localization model")
     
     # Run nested CV for tissue localization model
     if localization_model == 'TF':

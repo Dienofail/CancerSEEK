@@ -33,6 +33,8 @@ def parse_arguments():
                         help='Model type for tissue localization (RF=Random Forest, XGB=XGBoost, TF=TensorFlow Fusion, MOE=Mixture of Experts) (default: RF)')
     parser.add_argument('--target-spec', type=int, default=99,
                         help='Target specificity as integer (99=0.99, 985=0.985, etc.) for evaluation (default: 985)')
+    parser.add_argument('--use-additional-features', action='store_true',
+                        help='Include additional clinical and demographic features (gender, age, plasma_volume, race, DNA concentration, MAF) for the binary classifier')
 
     # Set defaults
     parser.set_defaults(standardize=False)
@@ -108,6 +110,35 @@ if 'omega_score' not in data_df.columns:
     else:
         print("\nDebug - omega_score not found in mutations_df. Will proceed without it.")
 
+# If Mutant_AF is available in mutations_df, add it to data_df as well
+if args.use_additional_features and 'Mutant_AF' in mutations_df.columns:
+    print("Adding Mutant_AF from mutations_df...")
+    mutant_af_cols = ['Patient_ID', 'Sample_ID', 'Mutant_AF']
+    mutant_af_df = mutations_df[mutant_af_cols].drop_duplicates()
+    
+    # Merge with data_df
+    data_df = data_df.merge(mutant_af_df, on=['Patient_ID', 'Sample_ID'], how='left')
+    # Fill missing Mutant_AF with 0
+    data_df['Mutant_AF'] = data_df['Mutant_AF'].fillna(0)
+    print(f"Debug - Added Mutant_AF. Shape after merge: {data_df.shape}")
+
+# Ensure all demographic features are properly formatted
+if args.use_additional_features:
+    print("Processing demographic and clinical features...")
+    
+    # Convert Sex to numeric (Male=1, Female=0)
+    if 'Sex' in data_df.columns:
+        data_df['Sex'] = data_df['Sex'].map({'Male': 1, 'Female': 0}).fillna(0.5)
+    
+    # Convert Race to one-hot encoding if needed
+    if 'Race' in data_df.columns and pd.api.types.is_object_dtype(data_df['Race']):
+        # Get dummies for Race and join with original dataframe
+        race_dummies = pd.get_dummies(data_df['Race'], prefix='Race')
+        data_df = pd.concat([data_df, race_dummies], axis=1)
+        # Drop the original Race column to avoid duplication
+        data_df.drop('Race', axis=1, inplace=True)
+        print(f"Debug - Converted Race to one-hot encoding. New columns: {race_dummies.columns.tolist()}")
+
 print(f"\nDebug - Final data shape: {data_df.shape}")
 print(f"Debug - First few columns: {data_df.columns.tolist()[:10]}")
 
@@ -135,6 +166,32 @@ if 'omega_score' in data_df.columns and data_df['omega_score'].isna().any():
         normal_omega_mean = data_df['omega_score'].dropna().mean()
     data_df['omega_score'] = data_df['omega_score'].fillna(normal_omega_mean)
 
+# Impute any missing values in demographic/clinical features if we're using them
+if args.use_additional_features:
+    demographic_features = ['Age', 'Sex', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration', 'Mutant_AF']
+    for col in demographic_features:
+        if col in data_df.columns and data_df[col].isna().any():
+            print(f"Imputing missing values in {col} with median")
+            # Use median for most demographic features as it's more robust to outliers
+            data_df[col] = data_df[col].fillna(data_df[col].median())
+    
+    # Handle any Race_* one-hot encoded columns that might have NaN values
+    race_columns = [col for col in data_df.columns if col.startswith('Race_')]
+    if race_columns:
+        print(f"Handling missing values in {len(race_columns)} Race columns")
+        # For each row with all NaN values in Race columns, set most common race to 1
+        race_null_mask = data_df[race_columns].isna().all(axis=1)
+        if race_null_mask.any():
+            # Find most common race
+            most_common_race = data_df[race_columns].sum().idxmax()
+            print(f"Setting {race_null_mask.sum()} rows with missing race to most common: {most_common_race}")
+            # Set this race to 1 for rows with all NaN race values
+            data_df.loc[race_null_mask, most_common_race] = 1
+        
+        # Fill any remaining NaNs with 0 (no membership in that race category)
+        for col in race_columns:
+            data_df[col] = data_df[col].fillna(0)
+
 # Create a list of columns to keep for modeling
 # These include identification columns needed by the model
 id_columns = ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage']
@@ -151,6 +208,25 @@ for col in data_df.columns:
         pd.api.types.is_numeric_dtype(data_df[col])):
         feature_columns.append(col)
 
+# When using additional features, ensure they're added to feature_columns
+if args.use_additional_features:
+    # Add demographic features
+    demographic_features = ['Age', 'Sex', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration', 'Mutant_AF']
+    for col in demographic_features:
+        if col in data_df.columns and col not in feature_columns:
+            # Convert to numeric if needed
+            if not pd.api.types.is_numeric_dtype(data_df[col]):
+                print(f"Converting {col} to numeric format")
+                data_df[col] = pd.to_numeric(data_df[col], errors='coerce')
+                data_df[col] = data_df[col].fillna(data_df[col].median())
+            feature_columns.append(col)
+    
+    # Add Race_* one-hot encoded columns if they exist
+    race_columns = [col for col in data_df.columns if col.startswith('Race_')]
+    for col in race_columns:
+        if col not in feature_columns:
+            feature_columns.append(col)
+
 print(f"\nDebug - Feature columns: {feature_columns[:5]}", "...")
 print(f"Debug - Number of feature columns: {len(feature_columns)}")
 
@@ -165,8 +241,33 @@ print(f"Debug - X columns: {X.columns.tolist()[:10]}", "...")
 # Define the protein features for LR model based on the paper
 lr_proteins = ['CA-125', 'CA19-9', 'CEA', 'HGF', 'Myeloperoxidase', 'OPN', 'Prolactin', 'TIMP-1']
 
+# If additional features are requested, include them for the detection model
+if args.use_additional_features:
+    print("Including additional clinical and demographic features for cancer detection model...")
+    
+    # Define the additional features to use
+    additional_features = []
+    
+    # Add demographic features from clinical_df if available
+    demographic_features = ['Age', 'Sex', 'Race', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration']
+    for feature in demographic_features:
+        if feature in X.columns:
+            additional_features.append(feature)
+            
+    # Add Mutant_AF from mutations_df if available via data_df
+    if 'Mutant_AF' in X.columns:
+        additional_features.append('Mutant_AF')
+    
+    print(f"Additional features being used: {additional_features}")
+    
+    # Combine with protein features
+    detection_features = lr_proteins + additional_features
+else:
+    # Use only the standard protein features
+    detection_features = lr_proteins
+
 # Verify all LR proteins exist and are numeric
-for protein in lr_proteins:
+for protein in detection_features:
     if protein not in X.columns:
         print(f"Warning: Protein {protein} not found in the dataset")
     elif not pd.api.types.is_numeric_dtype(X[protein]):
@@ -182,16 +283,18 @@ if not os.path.exists(plots_dir):
 
 print("\n==== Starting model training and evaluation ====")
 print(f"Training combined cancer detection ({args.detection_model}) and localization ({args.localization_model}) model with {X.shape[0]} samples")
-print(f"Using {len(lr_proteins)} protein features for detection model")
+print(f"Using {len(detection_features)} protein features for detection model")
 print(f"Performing {args.outer_splits}-fold outer CV and {args.inner_splits}-fold inner CV")
 print(f"Standardization: {args.standardize}, Log transformation: {args.log_transform}")
+print(f"Using additional features: {args.use_additional_features}")
 
-# Fit the combined model
+# Fit the combined model with detection_features
 combined_results = models.combined_cancer_detection_and_localization(
     X, y_cancer_status, y_cancer_type, clinical_df=clinical_df,
     outer_splits=args.outer_splits, inner_splits=args.inner_splits, random_state=args.random_seed,
     standardize_features=args.standardize, log_transform=log_transform,
-    detection_model=args.detection_model, localization_model=args.localization_model
+    detection_model=args.detection_model, localization_model=args.localization_model,
+    detection_features=detection_features  # Pass in detection_features
 )
 
 print("\n==== Model training complete ====")
@@ -219,17 +322,17 @@ localization_model = combined_results.get('localization_model', args.localizatio
 fig_roc, ax_roc, spec_percent = plotting.plot_roc_curve(
     y_cancer_status, 
     combined_results['detection_results']['probabilities'],
-    title=f"ROC Curve for CancerSEEK ({detection_model})",
+    title=f"ROC Curve for CancerSEEK ({detection_model})" + (" (w/extra features)" if args.use_additional_features else ""),
     model_type=detection_model,
-    save_data=os.path.join(plots_dir, f"roc_curve_data_{detection_model}.pkl"),
+    save_data=os.path.join(plots_dir, f"roc_curve_data_{detection_model}" + ("_extra_features" if args.use_additional_features else "") + ".pkl"),
     target_specificity=target_specificity
 )
 plt.tight_layout()
 # Save ROC curve to PDF
-roc_filename = f"roc_curve_{detection_model}_{spec_percent}.pdf"
+roc_filename = f"roc_curve_{detection_model}_{spec_percent}" + ("_extra_features" if args.use_additional_features else "") + ".pdf"
 plt.savefig(os.path.join(plots_dir, roc_filename), bbox_inches='tight')
 print(f"Saved ROC curve to {os.path.join(plots_dir, roc_filename)}")
-print(f"Saved ROC curve data to {os.path.join(plots_dir, f'roc_curve_data_{detection_model}_{spec_percent}.pkl')}")
+print(f"Saved ROC curve data to {os.path.join(plots_dir, f'roc_curve_data_{detection_model}_{spec_percent}' + ('_extra_features' if args.use_additional_features else '') + '.pkl')}")
 
 # Calculate sensitivity at target specificity for all cancers and by subtype
 sensitivity_by_subtype = plotting.calculate_sensitivity_by_subtype(
@@ -243,11 +346,11 @@ sensitivity_by_subtype = plotting.calculate_sensitivity_by_subtype(
 fig_subtype, ax_subtype, spec_percent = plotting.plot_sensitivity_by_subtype(
     sensitivity_by_subtype,
     figsize=(12, 6),
-    model_type=detection_model
+    model_type=detection_model + (" (w/extra features)" if args.use_additional_features else "")
 )
 plt.tight_layout()
 # Save sensitivity by subtype to PDF
-subtype_filename = f"sensitivity_by_subtype_{detection_model}_{spec_percent}.pdf"
+subtype_filename = f"sensitivity_by_subtype_{detection_model}_{spec_percent}" + ("_extra_features" if args.use_additional_features else "") + ".pdf"
 plt.savefig(os.path.join(plots_dir, subtype_filename), bbox_inches='tight')
 print(f"Saved sensitivity by subtype to {os.path.join(plots_dir, subtype_filename)}")
 
@@ -263,11 +366,11 @@ sensitivity_by_stage = plotting.calculate_sensitivity_by_stage(
 fig_stage, ax_stage, spec_percent = plotting.plot_sensitivity_by_stage(
     sensitivity_by_stage,
     figsize=(10, 6),
-    model_type=detection_model
+    model_type=detection_model + (" (w/extra features)" if args.use_additional_features else "")
 )
 plt.tight_layout()
 # Save sensitivity by stage to PDF
-stage_filename = f"sensitivity_by_stage_{detection_model}_{spec_percent}.pdf"
+stage_filename = f"sensitivity_by_stage_{detection_model}_{spec_percent}" + ("_extra_features" if args.use_additional_features else "") + ".pdf"
 plt.savefig(os.path.join(plots_dir, stage_filename), bbox_inches='tight')
 print(f"Saved sensitivity by stage to {os.path.join(plots_dir, stage_filename)}")
 
@@ -276,9 +379,9 @@ performance_csv_path = os.path.join(plots_dir, "performance_summary.csv")
 summary_df = plotting.create_performance_summary_csv(
     sensitivity_by_stage,
     performance_csv_path,
-    model_type=detection_model
+    model_type=detection_model + ("_extra_features" if args.use_additional_features else "")
 )
-print(f"Saved performance summary to {performance_csv_path.replace('.csv', f'_{detection_model}_{spec_percent}.csv')}")
+print(f"Saved performance summary to {performance_csv_path.replace('.csv', f'_{detection_model}_{spec_percent}' + ('_extra_features' if args.use_additional_features else '') + '.csv')}")
 
 # Plot tissue localization accuracy (Fig 3 in the paper)
 print("Processing tissue localization results...")
@@ -347,15 +450,49 @@ if combined_results['localization_results'] is not None:
         y_pred_proba,
         cancer_types=cancer_types,
         figsize=(12, 8),
-        detection_model=detection_model,
+        detection_model=detection_model + (" (w/extra features)" if args.use_additional_features else ""),
         localization_model=localization_model
     )
     # No need to update the title here as it's now handled in the plotting function
     plt.tight_layout()
     # Save tissue localization accuracy to PDF
-    loc_filename = f"tissue_localization_accuracy_{detection_model}_{localization_model}.pdf"
+    loc_filename = f"tissue_localization_accuracy_{detection_model}" + ("_extra_features" if args.use_additional_features else "") + f"_{localization_model}.pdf"
     plt.savefig(os.path.join(plots_dir, loc_filename), bbox_inches='tight')
     print(f"Saved tissue localization accuracy to {os.path.join(plots_dir, loc_filename)}")
+    
+    # Create array of actual predicted classes for confusion matrix
+    y_pred_classes = []
+    valid_indices = []
+    
+    for i, idx in enumerate(positive_indices):
+        idx_int = int(idx)  # Convert numpy int to Python int
+        # Only include samples where we have both true labels and predictions
+        if idx_int < len(predictions):
+            y_pred_classes.append(predictions[idx_int])
+            valid_indices.append(i)
+    
+    # Filter y_true to only include samples with valid predictions
+    y_true_cm = [y_true_filtered[i] for i in valid_indices]
+    
+    # Check if arrays match in length
+    if len(y_true_cm) == len(y_pred_classes):
+        # Plot tissue localization confusion matrix
+        fig_cm, ax_cm, cm_metrics = plotting.plot_tissue_localization_confusion_matrix(
+            y_true_cm,
+            y_pred_classes,
+            cancer_types=cancer_types,
+            figsize=(10, 8),
+            detection_model=detection_model + (" (w/extra features)" if args.use_additional_features else ""),
+            localization_model=localization_model
+        )
+        plt.tight_layout()
+        # Save confusion matrix to PDF
+        cm_filename = f"tissue_localization_confusion_matrix_{detection_model}" + ("_extra_features" if args.use_additional_features else "") + f"_{localization_model}.pdf"
+        plt.savefig(os.path.join(plots_dir, cm_filename), bbox_inches='tight')
+        print(f"Saved tissue localization confusion matrix to {os.path.join(plots_dir, cm_filename)}")
+        print(f"Localization metrics: Accuracy={cm_metrics['accuracy']:.3f}, Macro-F1={cm_metrics['macro_f1']:.3f}, Micro-F1={cm_metrics['micro_f1']:.3f}")
+    else:
+        print(f"Warning: Could not create confusion matrix due to length mismatch: y_true has {len(y_true_cm)} elements but y_pred has {len(y_pred_classes)} elements")
 else:
     print("No localization results available.")
 

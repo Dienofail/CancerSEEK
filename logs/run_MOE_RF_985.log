@@ -1,0 +1,199 @@
+Run started at: Mon Apr  7 02:00:26 PDT 2025
+Parameters: detection-model=MOE, localization-model=RF, target-spec=985
+-------------------------------------------------
+Using target specificity: 0.985
+Loading supplemental data...
+Processing patient information...
+
+Debug - Clinical df columns: ['Patient_ID', 'Sample_ID', 'Primary_tumor_sample_ID', 'Age', 'Sex', 'Race', 'Tumor_type', 'AJCC_Stage', 'Histopathology', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration', 'CancerSEEK_Logistic_Regression_Score', 'CancerSEEK_Test_Result']
+
+Debug - Mutations df columns: ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 'Plasma_volume_(mL)', 'Plasma_DNA_concentration', 'Mutation_identified_in_plasma', 'omega_score', 'Mutant_AF', 'per_mL_plasma'] ...
+
+Debug - Protein df columns: ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 'AFP', 'Angiopoietin-2', 'AXL', 'CA-125', 'CA_15-3', 'CA19-9'] ...
+Extracting protein measurements...
+
+Debug - Number of protein columns: 39
+Debug - First few protein columns: ['AFP', 'Angiopoietin-2', 'AXL', 'CA-125', 'CA_15-3']
+
+Debug - Shape after merging protein data: (1817, 53)
+Debug - Data df columns after protein merge: ['Patient_ID', 'Sample_ID', 'Primary_tumor_sample_ID', 'Age', 'Sex', 'Race', 'Tumor_type', 'AJCC_Stage', 'Histopathology', 'Plasma_volume_(mL)'] ...
+Checking for omega_score...
+
+Debug - Found omega_score in mutations_df. Shape: (1817, 3)
+
+Debug - Final data shape: (1817, 54)
+Debug - First few columns: ['Patient_ID', 'Sample_ID', 'Primary_tumor_sample_ID', 'Age', 'Sex', 'Race', 'Tumor_type', 'AJCC_Stage', 'Histopathology', 'Plasma_volume_(mL)']
+Handling missing values...
+
+Debug - Feature columns: ['Age', 'AFP', 'Angiopoietin-2', 'AXL', 'CA-125'] ...
+Debug - Number of feature columns: 41
+
+Debug - X shape: (1817, 45)
+Debug - X columns: ['Patient_ID', 'Sample_ID', 'Tumor_type', 'AJCC_Stage', 'Age', 'AFP', 'Angiopoietin-2', 'AXL', 'CA-125', 'CA_15-3'] ...
+
+==== Starting model training and evaluation ====
+Training combined cancer detection (MOE) and localization (RF) model with 1817 samples
+Using 8 protein features for detection model
+Performing 10-fold outer CV and 4-fold inner CV
+Standardization: False, Log transformation: none
+
+=== PHASE 1: Cancer Detection Model (MOE) ===
+Starting nested cross-validation for Mixture of Experts model...
+Binary classification
+Creating stratified folds based on clinical data...
+Warning: Not enough valid folds from clinical data, falling back to StratifiedKFold.
+MOE model CV folds:   0%|          | 0/10 [00:00<?, ?it/s]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  10%|█         | 1/10 [01:11<10:44, 71.64s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  20%|██        | 2/10 [02:24<09:39, 72.46s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  30%|███       | 3/10 [03:37<08:29, 72.72s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  40%|████      | 4/10 [04:50<07:16, 72.82s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  50%|█████     | 5/10 [06:03<06:04, 72.91s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  60%|██████    | 6/10 [07:17<04:52, 73.16s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  70%|███████   | 7/10 [08:31<03:40, 73.51s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  80%|████████  | 8/10 [09:46<02:27, 73.99s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds:  90%|█████████ | 9/10 [10:56<01:12, 72.85s/it]/opt/anaconda3/lib/python3.12/site-packages/keras/src/models/functional.py:225: UserWarning: The structure of `inputs` doesn't match the expected structure: ['protein_input', 'omega_input']. Received: the structure of inputs=('*', '*')
+  warnings.warn(
+MOE model CV folds: 100%|██████████| 10/10 [12:13<00:00, 73.90s/it]MOE model CV folds: 100%|██████████| 10/10 [12:13<00:00, 73.32s/it]
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 0: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 1: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 2: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 3: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 4: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 5: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 6: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 7: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 8: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Fold 9: Retraining with best parameters: {'lr': 0.001, 'batch_size': 16, 'epochs': 50}
+Completed MOE model with overall AUC: 0.8417
+
+Detected 590 cancer samples out of 1005 true cancer samples
+
+=== PHASE 2: Tissue Localization Model (RF) ===
+Starting nested cross-validation for tissue localization using RF...
+Creating stratified folds for tissue localization...
+Warning: Not enough valid folds from clinical data, falling back to StratifiedKFold.
+RF tissue localization CV folds:   0%|          | 0/10 [00:00<?, ?it/s]Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+RF tissue localization CV folds:  10%|█         | 1/10 [00:08<01:18,  8.77s/it]RF tissue localization CV folds:  20%|██        | 2/10 [00:15<01:00,  7.61s/it]RF tissue localization CV folds:  30%|███       | 3/10 [00:22<00:50,  7.25s/it]RF tissue localization CV folds:  40%|████      | 4/10 [00:29<00:42,  7.08s/it]RF tissue localization CV folds:  50%|█████     | 5/10 [00:36<00:35,  7.02s/it]RF tissue localization CV folds:  60%|██████    | 6/10 [00:43<00:28,  7.01s/it]RF tissue localization CV folds:  70%|███████   | 7/10 [00:50<00:20,  6.97s/it]RF tissue localization CV folds:  80%|████████  | 8/10 [00:56<00:13,  6.94s/it]RF tissue localization CV folds:  90%|█████████ | 9/10 [01:03<00:06,  6.91s/it]RF tissue localization CV folds: 100%|██████████| 10/10 [01:10<00:00,  6.87s/it]RF tissue localization CV folds: 100%|██████████| 10/10 [01:10<00:00,  7.05s/it]
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in protein dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Warning: 'Patient_ID' column not found in mutation dataframe. Using training_indices directly.
+Completed tissue localization model with overall accuracy: 0.4966
+
+=== Combining results from both models ===
+Final results: Detection accuracy: 0.7655, Localization accuracy: 0.4966
+
+==== Model training complete ====
+Generating plots...
+
+==== Debugging localization_results ====
+Type of combined_results: <class 'dict'>
+Type of localization_results: <class 'dict'>
+Keys in localization_results: dict_keys(['fold_results', 'overall_accuracy', 'predictions', 'confusion_matrices', 'overall_confusion_matrix', 'classes', 'feature_importances'])
+Type of predictions: <class 'numpy.ndarray'>
+Shape of predictions: (590,)
+predictions is a numpy array, not a DataFrame/Series with an index
+Saved ROC curve to plots/roc_curve_MOE_985.pdf
+Saved ROC curve data to plots/roc_curve_data_MOE_985.pkl
+Saved sensitivity by subtype to plots/sensitivity_by_subtype_MOE_985.pdf
+Saved sensitivity by stage to plots/sensitivity_by_stage_MOE_985.pdf
+Saved performance summary to plots/performance_summary_MOE_985.csv
+Processing tissue localization results...
+
+==== Debug: Tissue localization data ====
+Number of positive indices: 604
+Max positive index: 1816
+Predictions array length: 590
+Predictions array type: <class 'numpy.ndarray'>
+First few values in predictions: ['Colorectum' 'Colorectum' 'Colorectum' 'Colorectum' 'Stomach']
+Saved tissue localization accuracy to plots/tissue_localization_accuracy_MOE_RF.pdf
+Number of samples: 339
+Cancer types for matrix: ['Colorectum', 'Lung', 'Breast', 'Pancreas', 'Ovary', 'Esophagus', 'Liver', 'Stomach']
+Saved tissue localization confusion matrix to plots/tissue_localization_confusion_matrix_MOE_RF.pdf
+Localization metrics: Accuracy=0.324, Macro-F1=0.137, Micro-F1=0.324
+
+==== All processing complete ====
